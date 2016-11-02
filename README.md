@@ -35,12 +35,14 @@ the following ways;
  trajectory for applications where the optimal control trajectory lies
  along a boundary of infeasibility (eg. bang-bang control).
 
-Use the call 'inp = dpm()' to return a structure containing the fields
+Use the call `inp = dpm()` to return a structure containing the fields
 required by the dpm solver.
 
-Use the call '[inp, grid_subset] = dpm()' to return the previously
+Use the call `[inp, grid_subset] = dpm()` to return the previously
 described structure as well as an empty structure of the form used to
 configure limiting the search space for grid variable(s).
 
-Use the call [res, grid, t, c, map] = dpm(inp, mod_consts, h_iterplot)
+Use the call `[res, grid, t, c, map] = dpm(inp, mod_consts, h_iterplot)`
 to solve the dynamic programming problem.
+
+See the files `test_basic.m`, `test_loose.m`, and `test_multidim.m` for usage examples.
