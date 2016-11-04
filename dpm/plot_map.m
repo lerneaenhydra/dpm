@@ -374,5 +374,6 @@ function h_c = draw_map(map, dp_inp, idx, dim, n_arrows, res, en_colorbar, plots
 	end
 	
 	grid on;
+	axis tight;
 end
 

@@ -103,6 +103,15 @@ function varargout = dpm(varargin)
 %								1D; All methods supported by interp1
 %								>=2D; All methods supported by the
 %								griddedinterp class
+%						.extrapmode Extrapolation mode to use for forward
+%								calculation phase if the state ever leaves
+%								the convex hull of feasible points.
+%								Extrapolation is risky because there's no
+%								guarantee that we'll end up inside the
+%								region of feasible points again. Typically
+%								set to 'none' or 'nearest' for >=2D
+%								problems, 'inf' or 'extrap' for 1D
+%								problems.
 %						.pen_norm Norm to use for determining boundary for
 %								penalizing grid points near infeasible
 %								regions. Set to a string containing any of
@@ -509,14 +518,14 @@ function map = calc_back(grd, N, mod_consts, inp)
 				%final sample.
 				
 				if(N.N_x == 1)
-					cum_c = interp1(map(n_t+1).x, map(n_t+1).cum, scat_x_nn,  inp.sol.interpmode, inf);
+					cum_c = interp1(map(n_t+1).x, map(n_t+1).cum, scat_x_nn,  inp.sol.interpmode, inp.sol.extrapmode);
 				else
 					x_temp = cell(N.N_x, 1);
 					for j=1:N.N_x
 						x_temp{j} = reshape(map(n_t+1).x(:,j), inp.prb.N_x_grid.');
 					end
 					v_temp = reshape(map(n_t+1).cum, inp.prb.N_x_grid.');
-					F = griddedInterpolant(x_temp{:}, v_temp, inp.sol.interpmode, 'none');
+					F = griddedInterpolant(x_temp{:}, v_temp, inp.sol.interpmode, inp.sol.extrapmode);
 					%Manually execute the following section to plot the
 					%gridded and scattered data for a two-dimensional
 					%problem
@@ -711,7 +720,7 @@ function [res, c, t] = calc_fw(map, N, mod_consts, inp)
 
 				for idx=1:N.N_u
 					v_temp = reshape(map(n_t).u_o(:,idx), inp.prb.N_x_grid.');
-					F = griddedInterpolant(x_temp{:}, v_temp, inp.sol.interpmode, 'none');
+					F = griddedInterpolant(x_temp{:}, v_temp, inp.sol.interpmode, inp.sol.extrapmode);
 					u_o(:,idx) = F(x_o);
 				end
 

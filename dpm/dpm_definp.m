@@ -100,6 +100,13 @@ def_inp.sol.plotfun = [];
 %	>=2D; All methods supported by the griddedinterp class
 def_inp.sol.interpmode = [];
 
+%Extrapolation mode to use, only used in forward-calculation phase. Set to
+%a string, whose valid values depend on the chosen value of N_x as follows;
+%	1D; All methods supported by interp1, typically 'inf' or 'extrap'
+%	>=2D; All methods supported by the griddedinterp class, typically
+%	'none' or 'nearest'
+def_inp.sol.extrapmode = [];
+
 %Norm to use for determining boundary for penalizing grid points near
 %infeasible regions. Set to a string containing any of the norms supported
 %by the pdist2 function.
