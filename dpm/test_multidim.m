@@ -110,6 +110,14 @@ dp_inp.sol.plotfun = @plot_iter;
 %	1D; All methods supported by interp1
 %	>=2D; All methods supported by the griddedinterp class
 dp_inp.sol.interpmode = 'linear';
+%Extrapolation mode to use. Set similarly as the intermode field.
+if(test_dim == 1)
+	dp_inp.sol.extrapmode = inf;
+elseif(test_dim == 2)
+	dp_inp.sol.extrapmode = 'none';
+else
+	error('Invalid value for test_dim!');
+end
 
 dp_inp.sol.pen_norm = 'squaredeuclidean';
 dp_inp.sol.pen_thrs = 1.^2;

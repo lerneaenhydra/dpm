@@ -110,8 +110,8 @@ function varargout = dpm(varargin)
 %								guarantee that we'll end up inside the
 %								region of feasible points again. Typically
 %								set to 'none' or 'nearest' for >=2D
-%								problems, 'inf' or 'extrap' for 1D
-%								problems.
+%								problems, inf (the numerical value, not a
+%								string) or 'extrap' for 1D problems.
 %						.pen_norm Norm to use for determining boundary for
 %								penalizing grid points near infeasible
 %								regions. Set to a string containing any of

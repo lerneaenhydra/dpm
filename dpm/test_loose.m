@@ -8,10 +8,9 @@ format short eng
 %using an initial approximation that neglects the dynamics of the ODE with
 %faster time scale.
 %
-%For more details, see the conference paper 
-%
-warning('add reference to paper!');
-%
+%For more details, see the IFAC conference paper "A Multi-pass Optimal
+% Control Iterative Dynamic Programming Algorithm with Regularization",
+% Jonathan Lock, Tomas McKelvey, 2016.
 %
 
 %Define all project-wide constants
@@ -53,6 +52,7 @@ inp.sol.debug = false;
 inp.sol.fun = @model_loose_1d;
 inp.sol.plotfun = @plot_iter;
 inp.sol.interpmode = 'linear';
+inp.sol.extrapmode = inf;
 inp.sol.pen_norm = 'squaredeuclidean';
 inp.sol.pen_thrs = sqrt(2)^2;
 inp.sol.pen_fun_s = @(x) 2;
@@ -153,6 +153,7 @@ inp.sol.debug = false;
 inp.sol.fun = @model_loose_2d;
 inp.sol.plotfun = @plot_iter;
 inp.sol.interpmode = 'linear';
+inp.sol.extrapmode = 'none';
 
 inp.sol.pen_norm = 'squaredeuclidean';
 inp.sol.pen_thrs = sqrt(2)^2;

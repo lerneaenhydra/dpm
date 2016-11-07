@@ -25,7 +25,7 @@ end
 consts.T_f = 600;							%Total simulation time [s]
 
 %Sample time and total time vector for 1D case
-T_s_1D = 2.5;
+T_s_1D = 1;	%Use a short sample period for the 1-D case to allow for a narrower SOC band when performing the 2-D pass
 tt_1D = 0:T_s_1D:consts.T_f;
 
 if(strcmp(opmode, opmode_1d))
@@ -79,7 +79,7 @@ if(strcmp(opmode, opmode_1d))
 	%commanded power results in moving to more than the next state grid
 	%point regardless of the power commanded by the drive cycle
 	consts.N_grid_soc = ceil(1.1 * consts.batt_energy/consts.soc_e_delta);			%Number of grid points for state-of-charge variable
-	consts.N_grid_soc = max(consts.N_grid_soc, 100);									%Optionally require a minimum grid density
+	consts.N_grid_soc = max(consts.N_grid_soc, 250);									%Optionally require a minimum grid density
 
 	consts.N_grid_P_i_c_e = 25;				%Number of grid points for ICE power levels
 else
@@ -253,7 +253,7 @@ if(strcmp(opmode, opmode_1d))
 	consts.dp_inp.sol.fun = @dp_sysmod_1d;		%Set to handle to system model
 	consts.dp_inp.sol.plotfun = @plot_iter;	%If set to handle to iteration plot will display on every iteration
 	consts.dp_inp.sol.interpmode = 'linear';
-	consts.dp_inp.sol.extrapmode = 'inf';
+	consts.dp_inp.sol.extrapmode = inf;
 else
 	%The amount to scale the grid extent in each iteration when decreasing the
 	%grid size, centered about the previous optimal path
@@ -269,7 +269,11 @@ else
 	%iteration
 	consts.dp_inp.sol.regrid_u = true;
 	%Total number of solution iterations
-	consts.dp_inp.sol.iter_max = 5;
+	if(exist('res', 'var'))
+		consts.dp_inp.sol.iter_max = 15;	%Perform more iterations for multipass mode to look at convergence properties
+	else
+		consts.dp_inp.sol.iter_max = 5;
+	end
 	%System configuration
 	consts.dp_inp.sol.fun = @dp_sysmod_2d;		%Set to handle to system model
 	consts.dp_inp.sol.plotfun = @plot_iter;	%If set to handle to iteration plot will display on every iteration

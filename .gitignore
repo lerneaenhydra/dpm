@@ -1,0 +1,2 @@
+ #don't track binary results of HEV simulation
+ /hev_sim/*.mat

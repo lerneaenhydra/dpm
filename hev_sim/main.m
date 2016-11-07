@@ -27,7 +27,7 @@ addpath([pwd filesep '..' filesep 'dpm' filesep]);
 %	- 'multi' Will use the multi-pass method
 %	- 'single' Will use a single-pass "standard" DP method which takes
 %	significantly longer
-opmode = 'single';
+opmode = 'multi';
 
 
 %Note; Use the gen_battmodel.m, gen_bsfc_funs.m, gen_best_fuelinst_op.m and

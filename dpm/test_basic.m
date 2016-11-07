@@ -80,6 +80,9 @@ dp_inp_basic.sol.plotfun = @plot_iter;
 %	1D; All methods supported by interp1
 %	>=2D; All methods supported by the griddedinterp class
 dp_inp_basic.sol.interpmode = 'linear';
+%Extrapolation mode to use. Allowable values depend on N_x in the same way
+%as for the interpolation mode
+dp_inp_basic.sol.extrapmode = inf;
 
 dp_inp_basic.sol.pen_norm = 'squaredeuclidean';
 dp_inp_basic.sol.pen_thrs = pen_thrs;
