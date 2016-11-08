@@ -20,11 +20,13 @@ p_gen_net = -w * tau_gen - tau_gen^2 * k_lg;
 %generator power) with an additional loss term proportional to the power
 %squared. This gives a result that is similar to, but not the same as, a
 %model with a constant voltage source and series resistance. This, more
-%physically related example, can be solved for but contains a square root
+%physically related model, can be solved for but contains a square root
 %expression. To reduce the computational load and keep the model
-%mathmatically simple we will instead use this approximation, which is not
+%mathmatically simple the following approximation will be made, which is not
 %completely unreasonable as it penalizes battery power with large magnitude
 %and correctly handles losses for both positive and negative battery power.
+%As the rest of the HEV model is very arbitrary (e.g. the engine BSFC) this
+%isn't a completely unreasonable approximation.
 p_batt = p_tot - p_gen_net + (p_tot - p_gen_net)^2 * k_lb;
 
 %Model the battery SOC as an integrator
