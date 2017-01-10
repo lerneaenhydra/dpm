@@ -10,7 +10,7 @@ res.w = res.st(:,1);
 res.soc = res.st(:,2);
 res.tau_ice = res.ctrl(:,1);
 res.tau_gen = res.ctrl(:,2);
-res.tau_net = calc_tau_net(res.tau_ice, res.tau_gen, res.w, const);
+res.tau_net = calc_tau_net(res.tau_ice, res.tau_gen, res.w, const.shaft_fric, const.shaft_fric_norm_w);
 
 subplot(3,2,1);
 %Plot all torques
