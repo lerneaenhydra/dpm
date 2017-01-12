@@ -358,7 +358,7 @@ function varargout = dpm(varargin)
 		
 		dispstat(sprintf('Iteration %d of %d, net cumulative cost %5e', iter, inp.sol.iter_max, new_c),'keepthis');
 		%Draw plots
-		if(isfield(inp.sol, 'plotfun') && infeas_quit == false)
+		if(isfield(inp.sol, 'plotfun') && infeas_quit == false && isa(inp.sol.plotfun, 'function_handle'))
 			inp.sol.plotfun(last_res, last_grid, c, t, iter, mod_consts, h_iterplot);
 			drawnow;
 		end
