@@ -91,6 +91,7 @@ def_inp.sol.regrid_u = [];
 %Set true to enable debug mode (break execution on error/'unexpected' state
 def_inp.sol.debug = [];
 %System configuration
+def_inp.sol.fun_maxcombs = [];
 def_inp.sol.fun = [];
 def_inp.sol.plotfun = [];
 

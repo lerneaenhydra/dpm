@@ -18,11 +18,22 @@ function [x_nn, c] = test_model_1d(x_n, u_n, t, inp)
 
 %In this example, let the model be defined as y' = u and let the cost
 %function be defined as abs(y).
+%Optionally perform calculations on GPU
+
+enter = @(x) x;
+%enter = @(x) gpuArray(single(x));
+exit = @(x) x;
+%exit = @(x) double(gather(x));
+
+x_n = enter(x_n);
+u_n = enter(u_n);
 
 x_nn = x_n + u_n * inp.T_s;
 
 c = sum( abs(x_n) * inp.T_s, 2);
 
+x_nn = exit(x_nn);
+c = exit(c);
 
 end
 

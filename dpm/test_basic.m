@@ -15,6 +15,7 @@ else
 	pen_thrs = p.Results.pen_thrs;
 end
 
+tic;
 
 %DP solver set-up
 dp_inp_basic = dpm();
@@ -53,13 +54,13 @@ dp_inp_basic.prb.U_h = 1;
 
 %The number of grid points to generate for each state variable at each
 %sample
-dp_inp_basic.prb.N_x_grid = 25;
+dp_inp_basic.prb.N_x_grid = 1e3;
 %The number of grid points to generate for each control variable at each
 %sample
-dp_inp_basic.prb.N_u_grid = 15;
+dp_inp_basic.prb.N_u_grid = 1e3;
 
 %The amount to scale the grid extent in each iteration, centered about the
-%previous optimal path
+%previous optimal 5path
 dp_inp_basic.sol.mu_grid_dec = 0.75;
 dp_inp_basic.sol.mu_grid_inc = 1.051;
 %Termination threshold for maximum number of iterations
@@ -73,6 +74,7 @@ dp_inp_basic.sol.regrid_u = true;
 dp_inp_basic.sol.debug = false;
 %System configuration
 dp_inp_basic.sol.fun = @test_model_1d;
+dp_inp_basic.sol.fun_maxcombs = 1e3;
 dp_inp_basic.sol.plotfun = @plot_iter;
 
 %Interpolation mode to use. Set to a string, whose valid values depend on
@@ -93,6 +95,8 @@ mod_consts.T_s = dp_inp_basic.prb.T_s;
 
 h_plot = figure(1);
 [res_basic, grd_basic, t_basic, c_basic, map_basic] = dpm(dp_inp_basic, mod_consts, h_plot);
+
+toc;
 
 figure(2);
 subplot(1,2,1);
