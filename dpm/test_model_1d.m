@@ -1,6 +1,7 @@
 function [x_nn, c] = test_model_1d(x_n, u_n, t, inp)
 % [x_nn, c] = TEST_MODEL_1D(x_n, u_n, t, inp) Calculates the state resulting
 % from applying an input u_n to the system while at state x_n.
+% Calls the expanded system model for the actual computation.
 %	x_n		State at time t_n. Array where columns correspond to state
 %			variables. Each row corresponds to a given state configuration.
 %	u_n		Control input at time t_n. Array where columns correspond to
@@ -16,24 +17,15 @@ function [x_nn, c] = test_model_1d(x_n, u_n, t, inp)
 %			row in x_nn. Set to inf if state and control results in an
 %			invalid/undefined system transition.
 
-%In this example, let the model be defined as y' = u and let the cost
-%function be defined as abs(y).
-%Optionally perform calculations on GPU
+%The expanded model requires each state/control/option to be input as a
+%seperate argument; programmatically create this expansion here.
+s = orderfields(inp);
+opts = struct2cell(s);
 
-enter = @(x) x;
-%enter = @(x) gpuArray(single(x));
-exit = @(x) x;
-%exit = @(x) double(gather(x));
+x = num2cell(x_n, 1);
+u = num2cell(u_n, 1);
 
-x_n = enter(x_n);
-u_n = enter(u_n);
-
-x_nn = x_n + u_n * inp.T_s;
-
-c = sum( abs(x_n) * inp.T_s, 2);
-
-x_nn = exit(x_nn);
-c = exit(c);
+[x_nn, c] = test_model_1d_exp(x{:}, u{:}, t, opts{:});
 
 end
 

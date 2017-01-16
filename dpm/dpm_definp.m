@@ -90,10 +90,41 @@ def_inp.sol.regrid_x = [];
 def_inp.sol.regrid_u = [];
 %Set true to enable debug mode (break execution on error/'unexpected' state
 def_inp.sol.debug = [];
+
 %System configuration
+%The maximum number of state/control combinations to test per call to the
+%system model. Typically on the order of 1e2 -- 1e9
 def_inp.sol.fun_maxcombs = [];
+%The system dynamics model. Should be a function of type
+%[x_new, cost] = fun(x, u, t, opts) where;
+%	x is an n by prb.N_x_grid array with current state values
+%	u is an n by prb.N_u_grid array with control inputs
+%	t is a scalar with the current time
+%	opts is a struct with optional data
+%	x_new is an n by prb.N_x_grid array with the state value at the next
+%	sample after applying the control u to the current state x on a
+%	row-by-row basis
+%	cost is an n by 1 vector with the stage cost, i.e. the net cost of
+%	applying u to x and arriving at x_new
+%	Note: if using GPU calculation this function is typically only a
+%	wrapper for the sol.fun_exp function. (See test_model_1d.m).
 def_inp.sol.fun = [];
+%A generic plot function, called once per IDP iteration
 def_inp.sol.plotfun = [];
+
+%GPU-related setup
+%Set true to enable GPU model calculation
+def_inp.sol.gpu_enable = [];
+%Function to apply to input data before sending to GPU (e.g. @single)
+def_inp.sol.gpu_enter = [];
+%Function to apply to input data before sending to GPU (e.g. @double)
+def_inp.sol.gpu_exit = [];
+%Expanded system dynamics model. Should be a function of type
+%[x_new, cost] = fun(x, u, t, a, b, c, ...) where the outputs and first
+%three inputs are identical to sol.fun and a, b, c, ... are general
+%numerical inputs (i.e. arrays). Typically these should be orderd
+%alphabetically as sol.fun is simply a wrapper for this function.
+def_inp.sol.fun_exp = [];
 
 %Interpolation mode to use. Set to a string, whose valid values depend on
 %the chosen value of N_x as follows;

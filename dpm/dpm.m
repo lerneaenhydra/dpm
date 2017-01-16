@@ -172,7 +172,7 @@ function varargout = dpm(varargin)
 %						control signals res(1:n).u
 %				.finitespace Range of states that was reachable with finite
 %				cost during backward calculation.
-%
+%TODO: UPDATE!
 %			grd		Cell array with iter_max elements, with each element
 %					corresponding to the state and control grid used for
 %					the each DP iteration. Each element corresponds to a
@@ -478,24 +478,44 @@ function map = calc_back(grd, N, mod_consts, inp)
 		%call the system model several times with blocks of data
 		scat_x_nn = zeros(size(x_n));
 		
-		if(numel(inp.sol.fun_maxcombs) ~= 0 && inp.sol.fun_maxcombs > 0)
-			%Limit the number of state/control combinations per call to the
-			%system model.
-			for k=1:inp.sol.fun_maxcombs:size(scat_x_nn,1)
-				idx_call = k:k+inp.sol.fun_maxcombs-1;
-				idx_call(idx_call > size(scat_x_nn,1)) = [];
-				[scat_x_nn_k, scat_c_k] = inp.sol.fun(x_n(idx_call,:), u_n(idx_call,:), N.t(n_t), mod_consts);
-				scat_x_nn(idx_call,:) = scat_x_nn_k;
-				scat_c(idx_call,:) = scat_c_k;
-			end
+		%Manually handle the case where the system model is to be computed
+		%on the GPU
+		if(numel(inp.sol.gpu_enable) ~= 0 && inp.sol.gpu_enable == true)
+			%Set up state and control variables for GPU calculation
+			x_g = gpuArray(inp.sol.gpu_enter(x_n));
+			u_g = gpuArray(inp.sol.gpu_enter(u_n));
+			t_g = gpuArray(inp.sol.gpu_enter(N.t(n_t)));
+			
+			opts = struct2cell(orderfields(mod_consts));
+			
+			opts = cellfun(@gpuArray, opts, 'un', false);
+			
+			%Compute model dynamics
+			[scat_x_nn_g, scat_c_g] = arrayfun(inp.sol.fun_exp, x_g, u_g, t_g, opts{:});
+			
+			%Move results back to CPU
+			scat_x_nn = inp.sol.gpu_exit(gather(scat_x_nn_g));
+			scat_c = inp.sol.gpu_exit(gather(scat_c_g));
+			
 		else
-			%No limits placed on the number of state/control combinations
-			%to the system model, so simply supply all of the state/control
-			%combinations for the current time-step.
-			[scat_x_nn, scat_c] = inp.sol.fun(x_n, u_n, N.t(n_t), mod_consts);
+			%Perform model call on CPU
+			if(numel(inp.sol.fun_maxcombs) ~= 0 && inp.sol.fun_maxcombs > 0)
+				%Limit the number of state/control combinations per call to the
+				%system model.
+				for k=1:inp.sol.fun_maxcombs:size(scat_x_nn,1)
+					idx_call = k:k+inp.sol.fun_maxcombs-1;
+					idx_call(idx_call > size(scat_x_nn,1)) = [];
+					[scat_x_nn_k, scat_c_k] = inp.sol.fun(x_n(idx_call,:), u_n(idx_call,:), N.t(n_t), mod_consts);
+					scat_x_nn(idx_call,:) = scat_x_nn_k;
+					scat_c(idx_call,:) = scat_c_k;
+				end
+			else
+				%No limits placed on the number of state/control combinations
+				%to the system model, so simply supply all of the state/control
+				%combinations for the current time-step.
+				[scat_x_nn, scat_c] = inp.sol.fun(x_n, u_n, N.t(n_t), mod_consts);
+			end
 		end
-		
-
 		
 		%Ensure any nan and/or +/-inf are set to the internal 'inf'
 		%representation

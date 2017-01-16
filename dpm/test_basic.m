@@ -1,9 +1,20 @@
 function [res_basic, grd_basic, t_basic, c_basic, map_basic, dp_inp_basic] = test_basic(varargin)
-%Bare-bones example for a one-dimensional problem.
+%Bare-bones example for a one-dimensional problem optionally calculated on
+%the GPU.
+%To fairly compare the computational time for GPU calculations use the
+%profiler and compare the time needed to execute line
+% '[scat_x_nn_g, scat_c_g] = arrayfun(inp.sol.fun_exp, x_g, u_g, t_g, opts{:});'
+%with
+% '[scat_x_nn, scat_c] = inp.sol.fun(x_n, u_n, N.t(n_t), mod_consts);'
+%or
+% '[scat_x_nn_k, scat_c_k] = inp.sol.fun(x_n(idx_call,:), u_n(idx_call,:), N.t(n_t), mod_consts);'
+
 
 p = inputParser;
 addParameter(p, 'pen_thrs', []);
+addParameter(p, 'gpu_calc', []);
 parse(p, varargin{:});
+
 
 
 if(isempty(varargin))
@@ -11,11 +22,12 @@ if(isempty(varargin))
 	clear variables
 	format short eng	
 	pen_thrs = 0;
+	gpu_calc = false;
 else
 	pen_thrs = p.Results.pen_thrs;
+	gpu_calc = p.Results.gpu_calc;
 end
 
-tic;
 
 %DP solver set-up
 dp_inp_basic = dpm();
@@ -74,8 +86,13 @@ dp_inp_basic.sol.regrid_u = true;
 dp_inp_basic.sol.debug = false;
 %System configuration
 dp_inp_basic.sol.fun = @test_model_1d;
-dp_inp_basic.sol.fun_maxcombs = 1e3;
+dp_inp_basic.sol.fun_maxcombs = 1e6;
 dp_inp_basic.sol.plotfun = @plot_iter;
+%GPU configuration
+dp_inp_basic.sol.gpu_enable = gpu_calc;
+dp_inp_basic.sol.gpu_enter = @single;	%Use single-precision floating-point variables for good performance on standard "gaming" GPUs
+dp_inp_basic.sol.gpu_exit = @double;	%Convert data back to the default double-precision floats
+dp_inp_basic.sol.fun_exp = @test_model_1d_exp;
 
 %Interpolation mode to use. Set to a string, whose valid values depend on
 %the chosen value of N_x as follows;
@@ -95,8 +112,6 @@ mod_consts.T_s = dp_inp_basic.prb.T_s;
 
 h_plot = figure(1);
 [res_basic, grd_basic, t_basic, c_basic, map_basic] = dpm(dp_inp_basic, mod_consts, h_plot);
-
-toc;
 
 figure(2);
 subplot(1,2,1);
