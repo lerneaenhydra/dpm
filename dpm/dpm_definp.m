@@ -107,7 +107,7 @@ def_inp.sol.fun_maxcombs = [];
 %	cost is an n by 1 vector with the stage cost, i.e. the net cost of
 %	applying u to x and arriving at x_new
 %	Note: if using GPU calculation this function is typically only a
-%	wrapper for the sol.fun_exp function. (See test_model_1d.m).
+%	wrapper for the sol.fun_exp function. (See test_model_basic.m).
 def_inp.sol.fun = [];
 %A generic plot function, called once per IDP iteration
 def_inp.sol.plotfun = [];

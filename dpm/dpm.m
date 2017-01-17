@@ -97,7 +97,57 @@ function varargout = dpm(varargin)
 %								combinations to include per call to the
 %								system model.
 %						.fun	Handle to function representing system
-%								model.
+%								model. Should be a function of form
+%								[x_nn, c] = fun(x_n, u_n, t, opt) where;
+%									x_n is an array with an arbitrary
+%										number of rows (say n) and the i'th
+%										column corresponds to the i'th
+%										state variable.
+%									u_n is an array with n rows and the
+%										j'th column corresponds to the j'th
+%										input.
+%									t	is the current time
+%									opt an optional model parameter
+%										structure. (see mod_consts below)
+%									x_nn is an array of the same size as
+%										x_n and contains the state values
+%										at the next time sample (i.e. the
+%										result of applying u_n to x_n on a
+%										row-by-row basis).
+%									c	is a column array with n rows each
+%										of which corresponds to the cost of
+%										applying u_n to x_n.
+%								Is using GPU offloading this can simply be
+%								a wrapper for the fun_exp function, see
+%								test_model_basic.m
+%						.gpu_enable	Optional boolean, set true to enable
+%									calculating the model dynamics on the
+%									local GPU (if present and supported).
+%									See https://se.mathworks.com/discovery/matlab-gpu.html
+%									for more details on GPGPU.
+%						.gpu_enter	General-purpose function hande to call
+%									to process data sent to GPU. For
+%									consumer GPUs this could for example be
+%									@single, as they are very slow
+%									processing double-precision numerical
+%									types.
+%						.gpu_exit	General purpose function handle to call
+%									to process data returned from the GPU.
+%									If gpu_enter was set to @single, a
+%									reasonable value could be to choose
+%									this to be @double.
+%						.fun_exp	Expanded system model function. Due to
+%									language limitations in matlab, this
+%									function must be of the form;
+%									[x_nn1, x_nn2, ..., c] = fun(x_n1, x_n2, ..., u_n1, u_n2, ..., t, opt)
+%									where the arrays x_nn, x_n, and u_n in
+%									the previously described .fun field are
+%									replaced with a number of column
+%									vectors, where the number of
+%									arguments/returned values varies with
+%									the number of state and control
+%									variables. (See test_model_basic_exp.m
+%									for an example).
 %						.plotfun Optional handle to a plot function called
 %								on every iteration.
 %						.interpmode Interpolation mode to use. Set to a
@@ -172,7 +222,6 @@ function varargout = dpm(varargin)
 %						control signals res(1:n).u
 %				.finitespace Range of states that was reachable with finite
 %				cost during backward calculation.
-%TODO: UPDATE!
 %			grd		Cell array with iter_max elements, with each element
 %					corresponding to the state and control grid used for
 %					the each DP iteration. Each element corresponds to a
@@ -481,20 +530,32 @@ function map = calc_back(grd, N, mod_consts, inp)
 		%Manually handle the case where the system model is to be computed
 		%on the GPU
 		if(numel(inp.sol.gpu_enable) ~= 0 && inp.sol.gpu_enable == true)
-			%Set up state and control variables for GPU calculation
-			x_g = gpuArray(inp.sol.gpu_enter(x_n));
-			u_g = gpuArray(inp.sol.gpu_enter(u_n));
-			t_g = gpuArray(inp.sol.gpu_enter(N.t(n_t)));
+			%Set up state and control variables for GPU calculation. Create
+			%cell array with state/control, where each cell contains all
+			%combinations of a given state/control variable. In this case
+			%this is equivalent to one cell per column in x_n and u_n.
+			x_g = cellfun(@gpuArray, num2cell(inp.sol.gpu_enter(x_n),1), 'un', false);
+			u_g = cellfun(@gpuArray, num2cell(inp.sol.gpu_enter(u_n),1), 'un', false);
 			
-			opts = struct2cell(orderfields(mod_consts));
-			
+			%Send the optional parameters, order them in alphabetical order
+			%to ensure that the order the structure is created doesn't
+			%influence the argument order. This will convert the optional
+			%model constants to a cell array where each element contains
+			%each model parameter.
+			opts = num2cell(inp.sol.gpu_enter(struct2array(orderfields(mod_consts))));
 			opts = cellfun(@gpuArray, opts, 'un', false);
 			
-			%Compute model dynamics
-			[scat_x_nn_g, scat_c_g] = arrayfun(inp.sol.fun_exp, x_g, u_g, t_g, opts{:});
+			t_g = gpuArray(inp.sol.gpu_enter(N.t(n_t)));
+			
+			%Allocate space to store result in
+			%scat_x_nn_g = cellfun(@gpuArray, num2cell(inp.sol.gpu_enter(zeros(size(x_g{1},1), size(x_g,2))), 1), 'un', false);
+			
+			%Compute model dynamics. Re-use the current state memory
+			%elements (x_g) to store the model output.
+			[x_g{:}, scat_c_g] = arrayfun(inp.sol.fun_exp, x_g{:}, u_g{:}, t_g, opts{:});
 			
 			%Move results back to CPU
-			scat_x_nn = inp.sol.gpu_exit(gather(scat_x_nn_g));
+			scat_x_nn = inp.sol.gpu_exit(gather([x_g{:}]));
 			scat_c = inp.sol.gpu_exit(gather(scat_c_g));
 			
 		else
@@ -601,8 +662,8 @@ function map = calc_back(grd, N, mod_consts, inp)
 						scatter(map(n_t+1).x(fin_idx,1), map(n_t+1).x(fin_idx,2), [], map(n_t+1).cum(fin_idx), 'filled');
 						hold on;
 						scatter(map(n_t+1).x(~fin_idx,1), map(n_t+1).x(~fin_idx,2), 'd', 'MarkerEdgeColor', 'r', 'MarkerFaceColor', [1, .5, .5]);
-						scatter(scat_x_nn(:,1), scat_x_nn(:,2), [], scat_c, 'p');
-						scatter(x_n(1,1), x_n(1,2), 50, 'd');
+						scatter(scat_x_nn_k(:,1), scat_x_nn_k(:,2), [], scat_c_k, 'p');
+						scatter(x_n_k(1,1), x_n_k(1,2), 100, 'd');
 						legend('Valid', 'Inval', 'Scattered next states','Current state');
 						grid on;
 					end

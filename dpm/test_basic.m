@@ -1,6 +1,9 @@
 function [res_basic, grd_basic, t_basic, c_basic, map_basic, dp_inp_basic] = test_basic(varargin)
-%Bare-bones example for a one-dimensional problem optionally calculated on
-%the GPU.
+%Bare-bones example for the dpm solver using a two-state/two-control
+%problem optionally calculated on the GPU. See test_model_1d_exp for the
+%dynamic model definition. See test_loose for an example of how to first
+%solve a lower-dimensional problem and use its results to reduce the search
+%range for applicable problems.
 %To fairly compare the computational time for GPU calculations use the
 %profiler and compare the time needed to execute line
 % '[scat_x_nn_g, scat_c_g] = arrayfun(inp.sol.fun_exp, x_g, u_g, t_g, opts{:});'
@@ -15,14 +18,12 @@ addParameter(p, 'pen_thrs', []);
 addParameter(p, 'gpu_calc', []);
 parse(p, varargin{:});
 
-
-
 if(isempty(varargin))
 	clc
 	clear variables
 	format short eng	
-	pen_thrs = 0;
-	gpu_calc = false;
+	pen_thrs = 2.1;
+	gpu_calc = true;
 else
 	pen_thrs = p.Results.pen_thrs;
 	gpu_calc = p.Results.gpu_calc;
@@ -37,46 +38,46 @@ T_f = 4;
 %Contains the sample period
 dp_inp_basic.prb.T_s = 0.5;
 %Contains the lower bound for all state variables
-dp_inp_basic.prb.X_l = -1;
+dp_inp_basic.prb.X_l = [-1; -1];
 %Contains the upper bound for all state variables
-dp_inp_basic.prb.X_h = 2;
+dp_inp_basic.prb.X_h = [2; 2];
 
 %The number of state variables
-dp_inp_basic.prb.N_x = 1;
+dp_inp_basic.prb.N_x = 2;
 %The number of control variables
-dp_inp_basic.prb.N_u = 1;
+dp_inp_basic.prb.N_u = 2;
 %Contains the number of time-steps to simulate
 dp_inp_basic.prb.N_t = round(T_f / dp_inp_basic.prb.T_s)+1;
 
 
 %Contains the lower bound for the terminal condition for states
-dp_inp_basic.prb.XT_l = 1;
+dp_inp_basic.prb.XT_l = [1; 1];
 %Contains the upper bound for the terminal condition for states
-dp_inp_basic.prb.XT_h = inf;
+dp_inp_basic.prb.XT_h = [inf; inf];
 
 %Contains the upper and lower bounds for the initial condition for states
-dp_inp_basic.prb.X0_l = 1;
+dp_inp_basic.prb.X0_l = [1; 1];
 %Contains the upper bound for the initial condition for states
-dp_inp_basic.prb.X0_h = inf;
+dp_inp_basic.prb.X0_h = [inf; inf];
 
 %Contains the lower bound for all inputs
-dp_inp_basic.prb.U_l = -1;
+dp_inp_basic.prb.U_l = [-1; -2];
 %Contains the upper bound for all inputs
-dp_inp_basic.prb.U_h = 1;
+dp_inp_basic.prb.U_h = [1; 2];
 
 %The number of grid points to generate for each state variable at each
 %sample
-dp_inp_basic.prb.N_x_grid = 1e3;
+dp_inp_basic.prb.N_x_grid = [25; 25];
 %The number of grid points to generate for each control variable at each
 %sample
-dp_inp_basic.prb.N_u_grid = 1e3;
+dp_inp_basic.prb.N_u_grid = [25; 25];
 
 %The amount to scale the grid extent in each iteration, centered about the
 %previous optimal 5path
 dp_inp_basic.sol.mu_grid_dec = 0.75;
 dp_inp_basic.sol.mu_grid_inc = 1.051;
 %Termination threshold for maximum number of iterations
-dp_inp_basic.sol.iter_max = 1;
+dp_inp_basic.sol.iter_max = 10;
 %Set to true to allow re-gridding the state variables after each iteration
 dp_inp_basic.sol.regrid_x = true;
 %Set to true to allow re-gridding the control variables after each
@@ -85,14 +86,14 @@ dp_inp_basic.sol.regrid_u = true;
 %Set true to enable debug mode (break execution on error/'unexpected' state
 dp_inp_basic.sol.debug = false;
 %System configuration
-dp_inp_basic.sol.fun = @test_model_1d;
+dp_inp_basic.sol.fun = @test_model_basic;
 dp_inp_basic.sol.fun_maxcombs = 1e6;
 dp_inp_basic.sol.plotfun = @plot_iter;
 %GPU configuration
 dp_inp_basic.sol.gpu_enable = gpu_calc;
 dp_inp_basic.sol.gpu_enter = @single;	%Use single-precision floating-point variables for good performance on standard "gaming" GPUs
 dp_inp_basic.sol.gpu_exit = @double;	%Convert data back to the default double-precision floats
-dp_inp_basic.sol.fun_exp = @test_model_1d_exp;
+dp_inp_basic.sol.fun_exp = @test_model_basic_exp;
 
 %Interpolation mode to use. Set to a string, whose valid values depend on
 %the chosen value of N_x as follows;
@@ -101,7 +102,7 @@ dp_inp_basic.sol.fun_exp = @test_model_1d_exp;
 dp_inp_basic.sol.interpmode = 'linear';
 %Extrapolation mode to use. Allowable values depend on N_x in the same way
 %as for the interpolation mode
-dp_inp_basic.sol.extrapmode = inf;
+dp_inp_basic.sol.extrapmode = 'nearest';
 
 dp_inp_basic.sol.pen_norm = 'squaredeuclidean';
 dp_inp_basic.sol.pen_thrs = pen_thrs;
@@ -115,7 +116,7 @@ h_plot = figure(1);
 
 figure(2);
 subplot(1,2,1);
-plot(t_basic, reshape([res_basic{1}.x],1,[]));
+plot(t_basic, reshape([res_basic{1}.x],dp_inp_basic.prb.N_x,[]));
 grid on;
 title('Optimal state trajectory for initial and final grid');
 xlabel('t');
@@ -123,21 +124,23 @@ ylabel('x');
 hold on;
 ax = gca;
 ax.ColorOrderIndex = 1;
-plot(t_basic, reshape([res_basic{end}.x],1,[]), '--');
-init_str = arrayfun(@(x) sprintf('initial state %d', x), 1, 'un', false);
-opt_str = arrayfun(@(x) sprintf('optimal state %d', x), 1, 'un', false);
+plot(t_basic, reshape([res_basic{end}.x],dp_inp_basic.prb.N_x,[]), '--');
+init_str = arrayfun(@(x) sprintf('initial state %d', x), 1:dp_inp_basic.prb.N_x, 'un', false);
+opt_str = arrayfun(@(x) sprintf('optimal state %d', x), 1:dp_inp_basic.prb.N_x, 'un', false);
 legend([init_str, opt_str]);
 hold off;
 
 subplot(1,2,2);
-stairs(t_basic, [res_basic{1}.u]);
+plot(t_basic, reshape([res_basic{1}.u],dp_inp_basic.prb.N_u,[]));
 title('Optimal control signal for initial and final grid');
 grid on;
 xlabel('t');
 ylabel('u');
 hold on;
-stairs(t_basic, [res_basic{end}.u], '--');
-legend('u_{init}', 'u_{final}');
+plot(t_basic, reshape([res_basic{end}.u],dp_inp_basic.prb.N_u,[]), '--');
+init_str = arrayfun(@(x) sprintf('initial control %d', x), 1:dp_inp_basic.prb.N_u, 'un', false);
+opt_str = arrayfun(@(x) sprintf('optimal control %d', x), 1:dp_inp_basic.prb.N_u, 'un', false);
+legend([init_str, opt_str]);
 hold off;
 
 
