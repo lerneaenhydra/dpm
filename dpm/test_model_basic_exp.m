@@ -33,17 +33,21 @@ function [x_nn1, x_nn2, c] = test_model_basic_exp(x_n1, x_n2, u_n1, u_n2, t, t_s
 x_nn1 = x_n1 + u_n1 * t_s;
 x_nn2 = x_n2 + u_n2 * t_s;
 
-c = (abs(x_n1) + abs(x_n2)) * t_s;
-
 %Waste some CPU time to highlight the difference between CPU and GPU
 %execution. Note that the use of a for loop biases the results to the CPUs
 %benefit as branches are relatively more expensive on the GPU compared to
 %the CPU.
 
-foo = x_nn1;
+foo = abs(x_nn1) + 10;
 for i=1:1e3
 	foo = exp(foo);
 end
+
+%Foo will be at least e^e^e^...e^10, i.e. ridiculously large. To ensure
+%these calculations aren't removed by a semi-smart compiler add 1/foo to
+%the cost (as 1/foo will be ridiculously small this is OK).
+
+c = (abs(x_n1) + abs(x_n2)) * t_s + abs(1./foo);
 
 end
 
