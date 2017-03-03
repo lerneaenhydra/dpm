@@ -25,54 +25,75 @@ function plot_iter(res, grd, c, t, iter, const, h)
 	state_finitespace = cat(1, res.finitespace);
 	ctrl_range = [cat(2,grd.u_h).', cat(2, grd.u_l).'];
 
+	if(length(t > 50))
+		plotstr = '-';
+	else
+		plotstr = '-o';
+	end
+	
 	figure(h);
 	
 	clf;
 	subplot(3,2,1);
-	plotstuff(t, xo, state_finitespace);
+	cla;
+	plotstuff(t, xo, state_finitespace, plotstr);
 	grid on;
 	title('State progression and backwards-reachable state space');
 	xlabel('Time');
 	ylabel('State');
+	axis auto;
 
 	subplot(3,2,2);
-	plotstuff(t(1:end-1), uo, ctrl_range(1:end-1,:));
+	cla;
+	plotstuff(t(1:end-1), uo, ctrl_range(1:end-1,:), plotstr);
 	grid on;
 	title('Control');
 	xlabel('Time');
 	ylabel('Control');
+	axis auto;
 
 	subplot(3,2,3);
-	plot(t(1:end-1), c_samp, '-o');
+	cla;
+	plot(t(1:end-1), c_samp, plotstr);
 	grid on;
 	title('sample cost');
 	xlabel('time');
 	ylabel('cost');
+	axis auto;
 
 	subplot(3,2,4);
-	plot(t(1:end-1), cum, '-o');
+	cla;
+	plot(t(1:end-1), cum, plotstr);
 	grid on;
 	title('cumulative cost');
 	xlabel('time');
 	ylabel('cost');
+	axis auto;
 
 	subplot(3,2,5:6);
+	cla;
 	dummy = c(1:iter)/min(c(1:iter))-1;
 	if(all(dummy == 0))
 		dummy = ones(size(dummy));
 	else
 		dummy(dummy == 0) = min(dummy(dummy ~= 0));
 	end
-	semilogy(dummy, '-o');
+	if(length(c) > 50)
+		plotstr = '-';
+	else
+		plotstr = '-o';
+	end
+	semilogy(dummy, plotstr);
 	grid on;
 	title('Cost relative to lowest determined cost');
 	ylabel('Relative cost');
 	xlabel('Iteration');
+	axis auto;
 
 
 end
 
-function plotstuff(t, var, bound)
+function plotstuff(t, var, bound, plotstr)
 	hold on;
 	N = size(var, 2);
 	colmap = parula(N + 1);
@@ -84,7 +105,7 @@ function plotstuff(t, var, bound)
 				yyaxis right;
 			end
 		end
-		plot(t, var(:,k), '-o');
+		plot(t, var(:,k), plotstr);
 		th = plot(t(1:size(bound(:,k),1)), bound(:,k), 'LineStyle', '--');
 		set(get(get(th,'Annotation'),'LegendInformation'),'IconDisplayStyle','off');
 		th = plot(t(1:size(bound(:,k),1)), bound(:,k+N), 'LineStyle', '--');

@@ -83,10 +83,12 @@ function varargout = dpm(varargin)
 %
 %					.sol		All solution-related options
 %						.mu_grid_dec Scaling factor for grid between each
-%								successful iteration. Should be < 1.
+%								successful iteration. Should be < 1. See
+%								dpm_definp.m for more details.
 %						.mu_grid_inc Scaling factor for grid on an
 %								unsuccessful iteration. Should be > 1 and
 %								significantly less than 2 - mu_grid_dec.
+%								See dpm_definp.m for more details.
 %						.regrid_x Set true to allow re-scaling the state
 %								variable grid between iterations.
 %						.regrid_u Set true to allow re-scaling the control
@@ -398,9 +400,19 @@ function varargout = dpm(varargin)
 				else
 					%The current grid didn't give a useful result, sucks to be
 					%us. Try again with a new grid scaling factor.
-					new_mu = mu * inp.sol.mu_grid_inc;
+					if(isnumeric(mu))
+						new_mu = mu * inp.sol.mu_grid_inc;
+					else
+						new_mu.x = mu.x .* inp.sol.mu_grid_inc.x;
+						new_mu.u = mu.u .* inp.sol.mu_grid_inc.u;
+					end
+					
 					cand_grid = resize_grid(last_grid, last_res, inp.sol, mu, N);
-					dispstat(sprintf('Iteration %d of %d, invalid result with grid scaling factor %f, retrying with factor %f', iter, inp.sol.iter_max, mu, new_mu), 'keepthis');
+					if(isnumeric(mu))
+						dispstat(sprintf('Iteration %d of %d, invalid result with grid scaling factor %f, retrying with factor %f', iter, inp.sol.iter_max, mu, new_mu), 'keepthis');
+					else
+						dispstat(sprintf('Iteration %d of %d, invalid result with grid scaling factors, retrying with increased factors.', iter, inp.sol.iter_max), 'keepthis');
+					end
 					mu = new_mu;
 				end
 			end
@@ -434,13 +446,23 @@ function new_grd = resize_grid(grd, res, sol, mu, N)
 	new_grd = grd;
 	for k=1:N.N_t
 		if(sol.regrid_x)
-			range_x = (grd(k).x_h - grd(k).x_l) * mu; 
+			if(isnumeric(mu))
+				thismu = mu;
+			else
+				thismu = mu.x;
+			end
+			range_x = (grd(k).x_h - grd(k).x_l) .* thismu; 
 			new_grd(k).x_h = res(k).x.' + 1/2 * range_x;
 			new_grd(k).x_l = res(k).x.' - 1/2 * range_x;
 		end
 
 		if(sol.regrid_u)
-			range_u = (grd(k).u_h - grd(k).u_l) * mu;
+			if(isnumeric(mu))
+				thismu = mu;
+			else
+				thismu = mu.u;
+			end
+			range_u = (grd(k).u_h - grd(k).u_l) .* thismu;
 			new_grd(k).u_h = res(k).u.' + 1/2 * range_u;
 			new_grd(k).u_l = res(k).u.' - 1/2 * range_u;
 		end
@@ -707,7 +729,7 @@ function map = calc_back(grd, N, mod_consts, inp)
 		end
 		
 		%Manually execute the following lines to plot a detailed map of the
-		%results from the current time step
+		%results from the current time step (for a 2-state system)
 		if false
 			figure();
 			fin_idx = isfinite(map(n_t).cum);
@@ -816,6 +838,8 @@ function [res, c, t] = calc_fw(map, N, mod_consts, inp)
 						'c', zeros([1, 1]), ...
 						'cum', zeros([1, 1])), ...
 				N.N_t, 1);
+			
+	t = linspace(0, inp.prb.T_s * (inp.prb.N_t - 1), inp.prb.N_t);
 
 	for n_t = 1:N.N_t-1
 		pct = n_t / (N.N_t-1) * 100;
@@ -831,8 +855,19 @@ function [res, c, t] = calc_fw(map, N, mod_consts, inp)
 			%Find the first state to start from by selecting among the range of
 			%valid states that will result in the lowest total cost.
 			[~, idx] = min(map(n_t).cum);
-			u_o = map(n_t).u_o(idx,:);		%Select the optimal control signal to apply
-			x_o = map(n_t).x(idx,:);		%Select the optimal state to start from
+			%Check if there exists a finite feasible cost. If not set all
+			%outputs and return
+			if(isfinite(map(n_t).cum(idx)))
+				u_o = map(n_t).u_o(idx,:);		%Select the optimal control signal to apply
+				x_o = map(n_t).x(idx,:);		%Select the optimal state to start from
+			else
+				%No valid control exists, set all results to nan and bug out
+				for k = 1:length(res)
+					res(k) = structfun(@(x) x*nan, res(k), 'un', false);
+				end
+				c = nan;
+				return;
+			end
 		else
 			%From the current state, find the optimal control signal to
 			%apply by interpolating among the stored states.
@@ -892,7 +927,6 @@ function [res, c, t] = calc_fw(map, N, mod_consts, inp)
 	end
 
 	c = res(end-1).cum;
-	t = linspace(0, inp.prb.T_s * (inp.prb.N_t - 1), inp.prb.N_t);
 end
 
 function grd = update_grid(grd, N)

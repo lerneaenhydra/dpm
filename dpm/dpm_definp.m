@@ -78,7 +78,15 @@ def_inp.prb.grid_seed = cell(0);
 
 
 %The amount to scale the grid extent in each iteration, centered about the
-%previous optimal path
+%previous optimal path depending on whether or not the previous iteration
+%generated a valid solution or not. May be one of the following types;
+%	scalar		- Scale all controls and states by the same amount
+%	struct		- A struct with fields;
+%					.x	A column vector with N_x scalars, where the n'th
+%					element contains the amount to scale the n'th state
+%					variable by
+%					.u	A column vector with N_u scalars, where the n'th
+%					element contains the amount to scale th n'th control by
 def_inp.sol.mu_grid_dec = [];
 def_inp.sol.mu_grid_inc = [];
 %Termination threshold for maximum number of iterations
