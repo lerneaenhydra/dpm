@@ -11,11 +11,13 @@ function [res_basic, grd_basic, t_basic, c_basic, map_basic, dp_inp_basic] = tes
 % '[scat_x_nn, scat_c] = inp.sol.fun(x_n, u_n, N.t(n_t), mod_consts);'
 %or
 % '[scat_x_nn_k, scat_c_k] = inp.sol.fun(x_n(idx_call,:), u_n(idx_call,:), N.t(n_t), mod_consts);'
+%in dpm.m
 
 
 p = inputParser;
-addParameter(p, 'pen_thrs', []);
-addParameter(p, 'gpu_calc', []);
+addParameter(p, 'pen_thrs', []);	%Optional input scalar that allows changing the default penalty threshold
+addParameter(p, 'gpu_calc', []);	%Optional input boolean that enables/disables model GPU offloading. See the dpm help section for details on when this is beneficial.
+addParameter(p, 'time_inv', []);	%Optional input boolean that enables/disables the model time invariance assumption. See the dpm help section for details on when this is beneficial.
 parse(p, varargin{:});
 
 if(isempty(varargin))
@@ -24,9 +26,11 @@ if(isempty(varargin))
 	format short eng	
 	pen_thrs = 2.1;
 	gpu_calc = false;
+	time_inv = false;
 else
 	pen_thrs = p.Results.pen_thrs;
 	gpu_calc = p.Results.gpu_calc;
+	time_inv = p.Results.time_inv;
 end
 
 
@@ -77,7 +81,11 @@ dp_inp_basic.prb.N_u_grid = [25; 25];
 dp_inp_basic.sol.mu_grid_dec = 0.75;
 dp_inp_basic.sol.mu_grid_inc = 1.051;
 %Termination threshold for maximum number of iterations
-dp_inp_basic.sol.iter_max = 10;
+if time_inv
+	dp_inp_basic.sol.iter_max = 1;
+else
+	dp_inp_basic.sol.iter_max = 10;
+end
 %Set to true to allow re-gridding the state variables after each iteration
 dp_inp_basic.sol.regrid_x = true;
 %Set to true to allow re-gridding the control variables after each
@@ -94,6 +102,8 @@ dp_inp_basic.sol.gpu_enable = gpu_calc;
 dp_inp_basic.sol.gpu_enter = @single;	%Use single-precision floating-point variables for good performance on standard "gaming" GPUs
 dp_inp_basic.sol.gpu_exit = @double;	%Convert data back to the default double-precision floats
 dp_inp_basic.sol.fun_exp = @test_model_basic_exp;
+
+dp_inp_basic.sol.time_inv = time_inv;
 
 %Interpolation mode to use. Set to a string, whose valid values depend on
 %the chosen value of N_x as follows;

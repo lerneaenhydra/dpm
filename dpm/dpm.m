@@ -73,6 +73,12 @@ function varargout = dpm(varargin)
 %								for all state variables
 %						.N_x_grid The number of grid points for each state
 %								variable.
+%						.grid_seed Optional non-uniform grid setup. Set the
+%								n'th cell to a structure with the same
+%								fields as in grid_subset to force the dpm
+%								script to reduce the search space for the
+%								n'th state variable. See dpm_definp.m for
+%								details on how to set this up correctly.
 %
 %						Note; all the following fields must be matrices of
 %						size [N_u, 1]
@@ -150,6 +156,22 @@ function varargout = dpm(varargin)
 %									the number of state and control
 %									variables. (See test_model_basic_exp.m
 %									for an example).
+%						.time_inv	Optional flag that, if present and set 
+%								to true, indicates that the system model is
+%								time invariant (i.e.
+%								def_inp.sol.fun/def_inp.sol.fun_exp gives
+%								identical output for all tested input
+%								values t). If this is applicable and this
+%								flag is set the execution time will be
+%								increased very significantly. Note that
+%								this requires that the state/control grid
+%								is equal at all time instances, so this may
+%								*NOT* be used together with the range
+%								reducing method (i.e. non-empty
+%								def_inp.prb.grid_seed cells) or iterative
+%								dynamic programming method (i.e.
+%								def_inp.sol.iter_max set to any value other
+%								than 1).
 %						.plotfun Optional handle to a plot function called
 %								on every iteration.
 %						.interpmode Interpolation mode to use. Set to a
@@ -291,6 +313,15 @@ function varargout = dpm(varargin)
 		inp = varargin{1};
 		mod_consts = varargin{2};
 		h_iterplot = varargin{3};
+	end
+	
+	%Verify input set-up results in a valid combination of settings
+	%grid_seed and max_iter must be empty and set to 1 respectively if
+	%time_inv is set.
+	if(isfield(inp.sol, 'time_inv'))
+		if(~isempty(inp.prb.grid_seed) || inp.sol.iter_max ~= 1)
+			error('dpm:invalidinput', 'dpm does not support using the time-invariant-model mode with either a grid seed or iterative dynamic programming.\nEither set inp.sol.time_inv to false or make inp.prb.grid_seed an empty cell array and set inp.sol.iter_max to 1.%s', '');
+		end
 	end
 
 	%Generate shorthand notation for some variables
@@ -507,7 +538,6 @@ function map = calc_back(grd, N, mod_consts, inp)
 		%feasible solution to bring us from where we are now to the final
 		%state, so there is no point in performing the ordinary DP
 		%algorithm. Simply fill the map with data to indicate this.
-		
 		if(infeas_flag)
 			map(n_t).x = grd(n_t).x;
 			map(n_t).c = inf * ones(size(map(n_t).c));
@@ -535,70 +565,83 @@ function map = calc_back(grd, N, mod_consts, inp)
 		%using the scattered results. Denote x_n as the state at sample n_t
 		%and x_nn the state at sample n_t+1
 		
-		%Generate array with current states. Make N_u_comb copies of each
-		%row (as each row contains a single state combination).
-		x_n = arrayfun(@(x) repmat(x, N.N_u_comb, 1), grd(n_t).x, 'un', false);
-		x_n = cell2mat(x_n);
+		%If the problem is time-invariant we can skip performing a lot of
+		%calculations. It is sufficient to run this segment once and then
+		%simply re-use this data for successive values of n_t
+		if(isfield(inp.sol,'time_inv') && (n_t == N.N_t-1 || ~isequal(inp.sol.time_inv, true)))
 		
-		%Generate array with control signals to apply. As x_n is ordered as
-		%[1;1;...;1;2;2;...;2;...] u_n should be ordered as
-		%[1;2;3...;1;2;3...]
-		u_n = repmat(grd(n_t).u, N.N_x_comb, 1);
-		
-		%If the complete array is larger than an optional maximum size,
-		%call the system model several times with blocks of data
-		scat_x_nn = zeros(size(x_n));
-		
-		%Manually handle the case where the system model is to be computed
-		%on the GPU
-		if(numel(inp.sol.gpu_enable) ~= 0 && inp.sol.gpu_enable == true)
-			%Set up state and control variables for GPU calculation. Create
-			%cell array with state/control, where each cell contains all
-			%combinations of a given state/control variable. In this case
-			%this is equivalent to one cell per column in x_n and u_n.
-			x_g = cellfun(@gpuArray, num2cell(inp.sol.gpu_enter(x_n),1), 'un', false);
-			u_g = cellfun(@gpuArray, num2cell(inp.sol.gpu_enter(u_n),1), 'un', false);
-			
-			%Send the optional parameters, order them in alphabetical order
-			%to ensure that the order the structure is created doesn't
-			%influence the argument order. This will convert the optional
-			%model constants to a cell array where each element contains
-			%each model parameter.
-			opts = num2cell(inp.sol.gpu_enter(struct2array(orderfields(mod_consts))));
-			opts = cellfun(@gpuArray, opts, 'un', false);
-			
-			t_g = gpuArray(inp.sol.gpu_enter(N.t(n_t)));
-			
-			%Allocate space to store result in
-			%scat_x_nn_g = cellfun(@gpuArray, num2cell(inp.sol.gpu_enter(zeros(size(x_g{1},1), size(x_g,2))), 1), 'un', false);
-			
-			%Compute model dynamics. Re-use the current state memory
-			%elements (x_g) to store the model output.
-			[x_g{:}, scat_c_g] = arrayfun(inp.sol.fun_exp, x_g{:}, u_g{:}, t_g, opts{:});
-			
-			%Move results back to CPU
-			scat_x_nn = inp.sol.gpu_exit(gather([x_g{:}]));
-			scat_c = inp.sol.gpu_exit(gather(scat_c_g));
-			
-		else
-			%Perform model call on CPU
-			if(numel(inp.sol.fun_maxcombs) ~= 0 && inp.sol.fun_maxcombs > 0)
-				%Limit the number of state/control combinations per call to the
-				%system model.
-				for k=1:inp.sol.fun_maxcombs:size(scat_x_nn,1)
-					idx_call = k:k+inp.sol.fun_maxcombs-1;
-					idx_call(idx_call > size(scat_x_nn,1)) = [];
-					[scat_x_nn_k, scat_c_k] = inp.sol.fun(x_n(idx_call,:), u_n(idx_call,:), N.t(n_t), mod_consts);
-					scat_x_nn(idx_call,:) = scat_x_nn_k;
-					scat_c(idx_call,:) = scat_c_k;
-				end
+			%Generate array with current states. Make N_u_comb copies of each
+			%row (as each row contains a single state combination).
+			x_n_iter = arrayfun(@(x) repmat(x, N.N_u_comb, 1), grd(n_t).x, 'un', false);
+			x_n_iter = cell2mat(x_n_iter);
+
+			%Generate array with control signals to apply. As x_n is ordered as
+			%[1;1;...;1;2;2;...;2;...] u_n should be ordered as
+			%[1;2;3...;1;2;3...]
+			u_n_iter = repmat(grd(n_t).u, N.N_x_comb, 1);
+
+			%If the complete array is larger than an optional maximum size,
+			%call the system model several times with blocks of data
+			scat_x_nn_iter = zeros(size(x_n_iter));
+
+			%Manually handle the case where the system model is to be computed
+			%on the GPU
+			if(numel(inp.sol.gpu_enable) ~= 0 && inp.sol.gpu_enable == true)
+				%Set up state and control variables for GPU calculation. Create
+				%cell array with state/control, where each cell contains all
+				%combinations of a given state/control variable. In this case
+				%this is equivalent to one cell per column in x_n and u_n.
+				x_g_iter = cellfun(@gpuArray, num2cell(inp.sol.gpu_enter(x_n_iter),1), 'un', false);
+				u_g_iter = cellfun(@gpuArray, num2cell(inp.sol.gpu_enter(u_n_iter),1), 'un', false);
+
+				%Send the optional parameters, order them in alphabetical order
+				%to ensure that the order the structure is created doesn't
+				%influence the argument order. This will convert the optional
+				%model constants to a cell array where each element contains
+				%each model parameter.
+				opts = num2cell(inp.sol.gpu_enter(struct2array(orderfields(mod_consts))));
+				opts = cellfun(@gpuArray, opts, 'un', false);
+
+				t_g = gpuArray(inp.sol.gpu_enter(N.t(n_t)));
+
+				%Allocate space to store result in
+				%scat_x_nn_g = cellfun(@gpuArray, num2cell(inp.sol.gpu_enter(zeros(size(x_g{1},1), size(x_g,2))), 1), 'un', false);
+
+				%Compute model dynamics. Re-use the current state memory
+				%elements (x_g) to store the model output.
+				[x_g_iter{:}, scat_c_g] = arrayfun(inp.sol.fun_exp, x_g_iter{:}, u_g_iter{:}, t_g, opts{:});
+
+				%Move results back to CPU
+				scat_x_nn_iter = inp.sol.gpu_exit(gather([x_g_iter{:}]));
+				scat_c_iter = inp.sol.gpu_exit(gather(scat_c_g));
+
 			else
-				%No limits placed on the number of state/control combinations
-				%to the system model, so simply supply all of the state/control
-				%combinations for the current time-step.
-				[scat_x_nn, scat_c] = inp.sol.fun(x_n, u_n, N.t(n_t), mod_consts);
+				%Perform model call on CPU
+				if(numel(inp.sol.fun_maxcombs) ~= 0 && inp.sol.fun_maxcombs > 0)
+					%Limit the number of state/control combinations per call to the
+					%system model.
+					for k=1:inp.sol.fun_maxcombs:size(scat_x_nn_iter,1)
+						idx_call = k:k+inp.sol.fun_maxcombs-1;
+						idx_call(idx_call > size(scat_x_nn_iter,1)) = [];
+						[scat_x_nn_k, scat_c_k] = inp.sol.fun(x_n_iter(idx_call,:), u_n_iter(idx_call,:), N.t(n_t), mod_consts);
+						scat_x_nn_iter(idx_call,:) = scat_x_nn_k;
+						scat_c_iter(idx_call,:) = scat_c_k;
+					end
+				else
+					%No limits placed on the number of state/control combinations
+					%to the system model, so simply supply all of the state/control
+					%combinations for the current time-step.
+					[scat_x_nn_iter, scat_c_iter] = inp.sol.fun(x_n_iter, u_n_iter, N.t(n_t), mod_consts);
+				end
 			end
 		end
+		
+		%Create copies of all variables generated by the model call that
+		%will be used.
+		scat_x_nn = scat_x_nn_iter;
+		scat_c = scat_c_iter;
+		x_n = x_n_iter;
+		u_n = u_n_iter;
 		
 		%Ensure any nan and/or +/-inf are set to the internal 'inf'
 		%representation

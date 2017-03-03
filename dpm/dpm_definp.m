@@ -101,7 +101,7 @@ def_inp.sol.debug = [];
 
 %System configuration
 %The maximum number of state/control combinations to test per call to the
-%system model. Typically on the order of 1e2 -- 1e9
+%system model. Reasonable values are typically on the order of 1e2 -- 1e9
 def_inp.sol.fun_maxcombs = [];
 %The system dynamics model. Should be a function of type
 %[x_new, cost] = fun(x, u, t, opts) where;
@@ -133,6 +133,17 @@ def_inp.sol.gpu_exit = [];
 %numerical inputs (i.e. arrays). Typically these should be orderd
 %alphabetically as sol.fun is simply a wrapper for this function.
 def_inp.sol.fun_exp = [];
+
+%Optional flag that, if present and set to true, indicates that the system
+%model is time invariant (i.e. def_inp.sol.fun/def_inp.sol.fun_exp gives
+%identical output for all tested input values t). If this is applicable and
+%this flag is set the execution time will be increased very significantly.
+%Note that this requires that the state/control grid is equal at all time
+%instances, so this may *NOT* be used together with the range reducing
+%method (i.e. non-empty def_inp.prb.grid_seed cells) or iterative dynamic
+%programming method (i.e. def_inp.sol.iter_max set to any value other than
+%1).
+def_inp.sol.time_inv = [];
 
 %Interpolation mode to use. Set to a string, whose valid values depend on
 %the chosen value of N_x as follows;
