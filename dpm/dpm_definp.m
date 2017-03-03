@@ -139,10 +139,11 @@ def_inp.sol.fun_exp = [];
 %identical output for all tested input values t). If this is applicable and
 %this flag is set the execution time will be increased very significantly.
 %Note that this requires that the state/control grid is equal at all time
-%instances, so this may *NOT* be used together with the range reducing
-%method (i.e. non-empty def_inp.prb.grid_seed cells) or iterative dynamic
-%programming method (i.e. def_inp.sol.iter_max set to any value other than
-%1).
+%instances, so this will give poor perfomance for applications where the
+%state or control varies significantly over time, especially if used
+%together with the range reducing method (i.e. non-empty
+%def_inp.prb.grid_seed cells) or iterative dynamic programming method (i.e.
+%def_inp.sol.iter_max set to any value other than 1).
 def_inp.sol.time_inv = [];
 
 %Interpolation mode to use. Set to a string, whose valid values depend on

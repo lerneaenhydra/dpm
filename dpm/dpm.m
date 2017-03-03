@@ -165,13 +165,15 @@ function varargout = dpm(varargin)
 %								flag is set the execution time will be
 %								increased very significantly. Note that
 %								this requires that the state/control grid
-%								is equal at all time instances, so this may
-%								*NOT* be used together with the range
-%								reducing method (i.e. non-empty
-%								def_inp.prb.grid_seed cells) or iterative
-%								dynamic programming method (i.e.
-%								def_inp.sol.iter_max set to any value other
-%								than 1).
+%								is equal at all time instances, so this
+%								implies that the effectiveness of the
+%								range-reducing method (set by
+%								inp.prb.grid_seed) and iterative dynamic
+%								programming (set by inp.sol.iter_max) is
+%								reduced for problems where the state and
+%								controls vary significantly over time. All
+%								grids will be forced to be identical for
+%								all time samples.
 %						.plotfun Optional handle to a plot function called
 %								on every iteration.
 %						.interpmode Interpolation mode to use. Set to a
@@ -314,15 +316,6 @@ function varargout = dpm(varargin)
 		mod_consts = varargin{2};
 		h_iterplot = varargin{3};
 	end
-	
-	%Verify input set-up results in a valid combination of settings
-	%grid_seed and max_iter must be empty and set to 1 respectively if
-	%time_inv is set.
-	if(isfield(inp.sol, 'time_inv'))
-		if(~isempty(inp.prb.grid_seed) || inp.sol.iter_max ~= 1)
-			error('dpm:invalidinput', 'dpm does not support using the time-invariant-model mode with either a grid seed or iterative dynamic programming.\nEither set inp.sol.time_inv to false or make inp.prb.grid_seed an empty cell array and set inp.sol.iter_max to 1.%s', '');
-		end
-	end
 
 	%Generate shorthand notation for some variables
 	N.N_t = inp.prb.N_t;							%Number of sample points
@@ -334,6 +327,11 @@ function varargout = dpm(varargin)
 	N.N_x_comb = prod(inp.prb.N_x_grid);			%Number of state combinations at each sample
 	N.N_u_comb = prod(inp.prb.N_u_grid);			%Number of control combinations at each sample
 	N.t = linspace(0, N.T_s * (N.N_t - 1), N.N_t);	%Time at each sample point
+	
+	%Boolean that is true if the model is time-invariant. This will change
+	%how many times the model is called and significantly change how the
+	%state/control grid is generated/updated.
+	mdl_time_inv = isfield(inp.sol,'time_inv') && isequal(inp.sol.time_inv, true);
 	
 	%Miscellaneous initialization
 	dispstat('','init');
@@ -375,7 +373,7 @@ function varargout = dpm(varargin)
 		
 	%Fill in grid based on the values we have now placed in x_l, x_h, u_l,
 	%and u_h.
-	last_grid = update_grid(last_grid, N);
+	last_grid = update_grid(last_grid, N, mdl_time_inv);
 	
 	%Flag to indicate we wish to quit due to infeasibility on the first
 	%iteration
@@ -394,14 +392,14 @@ function varargout = dpm(varargin)
 		if(iter > 1)
 			%After the first iteration, start narrowing the range of values
 			%in the state and control grids.
-			cand_grid = resize_grid(last_grid, last_res, inp.sol, mu, N);
+			cand_grid = resize_grid(last_grid, last_res, inp.sol, mu, N, mdl_time_inv);
 		else
 			cand_grid = last_grid;
 		end
 		
 		while(res_invalid && infeas_quit == false)
 			%Perform back-calculation
-			last_map = calc_back(cand_grid, N, mod_consts, inp);
+			last_map = calc_back(cand_grid, N, mod_consts, inp, mdl_time_inv);
 
 			%Apply forward calculation
 			[cand_res, new_c, t] = calc_fw(last_map, N, mod_consts, inp);
@@ -438,7 +436,7 @@ function varargout = dpm(varargin)
 						new_mu.u = mu.u .* inp.sol.mu_grid_inc.u;
 					end
 					
-					cand_grid = resize_grid(last_grid, last_res, inp.sol, mu, N);
+					cand_grid = resize_grid(last_grid, last_res, inp.sol, mu, N, mdl_time_inv);
 					if(isnumeric(mu))
 						dispstat(sprintf('Iteration %d of %d, invalid result with grid scaling factor %f, retrying with factor %f', iter, inp.sol.iter_max, mu, new_mu), 'keepthis');
 					else
@@ -470,38 +468,7 @@ function varargout = dpm(varargin)
 
 end
 
-function new_grd = resize_grid(grd, res, sol, mu, N)
-	%Center the new grid values about the last calculated solution,
-	%reducing the total extent of the range by mu_grid, while ensuring the
-	%grid range remains within the lower and upper bounds.
-	new_grd = grd;
-	for k=1:N.N_t
-		if(sol.regrid_x)
-			if(isnumeric(mu))
-				thismu = mu;
-			else
-				thismu = mu.x;
-			end
-			range_x = (grd(k).x_h - grd(k).x_l) .* thismu; 
-			new_grd(k).x_h = res(k).x.' + 1/2 * range_x;
-			new_grd(k).x_l = res(k).x.' - 1/2 * range_x;
-		end
-
-		if(sol.regrid_u)
-			if(isnumeric(mu))
-				thismu = mu;
-			else
-				thismu = mu.u;
-			end
-			range_u = (grd(k).u_h - grd(k).u_l) .* thismu;
-			new_grd(k).u_h = res(k).u.' + 1/2 * range_u;
-			new_grd(k).u_l = res(k).u.' - 1/2 * range_u;
-		end
-	end
-	new_grd = update_grid(new_grd, N);
-end
-
-function map = calc_back(grd, N, mod_consts, inp)
+function map = calc_back(grd, N, mod_consts, inp, mdl_time_inv)
 	%Apply a backwards DP search. All we are essentially doing here is
 	%creating a map with costs to transition from any one state combination
 	%at time t_n to the lowest-cost state that lies within the bounds set
@@ -568,8 +535,7 @@ function map = calc_back(grd, N, mod_consts, inp)
 		%If the problem is time-invariant we can skip performing a lot of
 		%calculations. It is sufficient to run this segment once and then
 		%simply re-use this data for successive values of n_t
-		if(isfield(inp.sol,'time_inv') && (n_t == N.N_t-1 || ~isequal(inp.sol.time_inv, true)))
-		
+		if(~mdl_time_inv || n_t == N.N_t - 1)
 			%Generate array with current states. Make N_u_comb copies of each
 			%row (as each row contains a single state combination).
 			x_n_iter = arrayfun(@(x) repmat(x, N.N_u_comb, 1), grd(n_t).x, 'un', false);
@@ -972,7 +938,61 @@ function [res, c, t] = calc_fw(map, N, mod_consts, inp)
 	c = res(end-1).cum;
 end
 
-function grd = update_grid(grd, N)
+
+function new_grd = resize_grid(grd, res, sol, mu, N, mdl_time_inv)
+	%Center the new grid values about the last calculated solution,
+	%reducing the total extent of the range by mu_grid, while ensuring the
+	%grid range remains within the lower and upper bounds.
+	new_grd = grd;
+	for k=1:N.N_t
+		if(sol.regrid_x)
+			if(isnumeric(mu))
+				thismu = mu;
+			else
+				thismu = mu.x;
+			end
+			range_x = (grd(k).x_h - grd(k).x_l) .* thismu; 
+			new_grd(k).x_h = res(k).x.' + 1/2 * range_x;
+			new_grd(k).x_l = res(k).x.' - 1/2 * range_x;
+		end
+
+		if(sol.regrid_u)
+			if(isnumeric(mu))
+				thismu = mu;
+			else
+				thismu = mu.u;
+			end
+			range_u = (grd(k).u_h - grd(k).u_l) .* thismu;
+			new_grd(k).u_h = res(k).u.' + 1/2 * range_u;
+			new_grd(k).u_l = res(k).u.' - 1/2 * range_u;
+		end
+	end
+	new_grd = update_grid(new_grd, N, mdl_time_inv);
+end
+
+function grd = update_grid(grd, N, mdl_time_inv)
+	%Generate grid entries based on the specified grid bounds for each
+	%state/control variable	
+	if(mdl_time_inv)
+		%Model is assumed to be time-invariant, so the grid must be chosen
+		%to be identical at every sample. This means we need to check the
+		%required range of each state/control variable for each sample and
+		%make the grid cover at least this range, possibly altering the
+		%requested grid extents
+		x_l = min(cat(2,grd(:).x_l),[],2);
+		x_h = max(cat(2,grd(:).x_h),[],2);
+		u_l = min(cat(2,grd(:).u_l),[],2);
+		u_h = max(cat(2,grd(:).u_h),[],2);
+		
+		for k = 1:N.N_t
+			grd(k).x_l = x_l;
+			grd(k).x_h = x_h;
+			grd(k).u_l = u_l;
+			grd(k).u_h = u_h;
+			
+		end
+	end
+	
 	for k = 1:N.N_t
 		x = arrayfun(@(l, h, n) linspace(l, h, n), grd(k).x_l, grd(k).x_h, N.N_x_grid, 'un', false);
 		u = arrayfun(@(l, h, n) linspace(l, h, n), grd(k).u_l, grd(k).u_h, N.N_u_grid, 'un', false);

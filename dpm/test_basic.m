@@ -81,11 +81,7 @@ dp_inp_basic.prb.N_u_grid = [25; 25];
 dp_inp_basic.sol.mu_grid_dec = 0.75;
 dp_inp_basic.sol.mu_grid_inc = 1.051;
 %Termination threshold for maximum number of iterations
-if time_inv
-	dp_inp_basic.sol.iter_max = 1;
-else
-	dp_inp_basic.sol.iter_max = 10;
-end
+dp_inp_basic.sol.iter_max = 30;
 %Set to true to allow re-gridding the state variables after each iteration
 dp_inp_basic.sol.regrid_x = true;
 %Set to true to allow re-gridding the control variables after each
@@ -104,6 +100,19 @@ dp_inp_basic.sol.gpu_exit = @double;	%Convert data back to the default double-pr
 dp_inp_basic.sol.fun_exp = @test_model_basic_exp;
 
 dp_inp_basic.sol.time_inv = time_inv;
+
+%If using the model-time-invariance assumption the grid must be identical
+%for all samples. This means that IDP only ever makes sense for
+%applications where the states/controls are relatively constant compared to
+%the initial state. To illustrate this, artificially inflate the initial
+%search space by a factor of 100 (which ensures that the final result gives
+%a trajectory that is fairly constant in this range).
+if(time_inv)
+	dp_inp_basic.prb.X_l = dp_inp_basic.prb.X_l * 100;
+	dp_inp_basic.prb.X_h = dp_inp_basic.prb.X_h * 100;
+	dp_inp_basic.prb.U_l = dp_inp_basic.prb.U_l * 100;
+	dp_inp_basic.prb.U_h = dp_inp_basic.prb.U_h * 100;
+end
 
 %Interpolation mode to use. Set to a string, whose valid values depend on
 %the chosen value of N_x as follows;
