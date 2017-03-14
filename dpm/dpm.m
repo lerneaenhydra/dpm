@@ -129,33 +129,31 @@ function varargout = dpm(varargin)
 %								a wrapper for the fun_exp function, see
 %								test_model_basic.m
 %						.gpu_enable	Optional boolean, set true to enable
-%									calculating the model dynamics on the
-%									local GPU (if present and supported).
-%									See https://se.mathworks.com/discovery/matlab-gpu.html
-%									for more details on GPGPU.
+%								calculating the model dynamics on the local
+%								GPU (if present and supported). See
+%								https://se.mathworks.com/discovery/matlab-gpu.html
+%								for more details on GPGPU.
 %						.gpu_enter	General-purpose function hande to call
-%									to process data sent to GPU. For
-%									consumer GPUs this could for example be
-%									@single, as they are very slow
-%									processing double-precision numerical
-%									types.
+%								to process data sent to GPU. For consumer
+%								GPUs this could for example be @single, as
+%								they are very slow processing
+%								double-precision numerical types.
 %						.gpu_exit	General purpose function handle to call
-%									to process data returned from the GPU.
-%									If gpu_enter was set to @single, a
-%									reasonable value could be to choose
-%									this to be @double.
+%								to process data returned from the GPU. If
+%								gpu_enter was set to @single, a reasonable
+%								value could be to choose this to be
+%								@double.
 %						.fun_exp	Expanded system model function. Due to
-%									language limitations in matlab, this
-%									function must be of the form;
-%									[x_nn1, x_nn2, ..., c] = fun(x_n1, x_n2, ..., u_n1, u_n2, ..., t, opt)
-%									where the arrays x_nn, x_n, and u_n in
-%									the previously described .fun field are
-%									replaced with a number of column
-%									vectors, where the number of
-%									arguments/returned values varies with
-%									the number of state and control
-%									variables. (See test_model_basic_exp.m
-%									for an example).
+%								language limitations in matlab, this
+%								function must be of the form; [x_nn1,
+%								x_nn2, ..., c] = fun(x_n1, x_n2, ..., u_n1,
+%								u_n2, ..., t, opt) where the arrays x_nn,
+%								x_n, and u_n in the previously described
+%								.fun field are replaced with a number of
+%								column vectors, where the number of
+%								arguments/returned values varies with the
+%								number of state and control variables. (See
+%								test_model_basic_exp.m for an example).
 %						.time_inv	Optional flag that, if present and set 
 %								to true, indicates that the system model is
 %								time invariant (i.e.
@@ -226,11 +224,14 @@ function varargout = dpm(varargin)
 %						.debug	Set true to enable debugging mode, will
 %								stop execution in this function on
 %								error/'unexpected' results.
+%						.quiet	Set true to disable terminal status
+%								messages.
 %
 %			mod_consts	Input which is directly passed to system model
 %						function.
 %			
-%			h_iterplot	Figure handle for iteration plot.
+%			h_iterplot	Figure handle for iteration plot if configured for
+%						use.
 % 
 % Returns;	res		Cell array with iter_max elements, with each element
 %					corresponding to the results at each grid refinement.
@@ -311,11 +312,11 @@ function varargout = dpm(varargin)
 		[dummy{:}] = dpm_definp();
 		varargout = dummy;
 		return;
-	else
-		inp = varargin{1};
-		mod_consts = varargin{2};
+	elseif(numel(varargin) == 3)
 		h_iterplot = varargin{3};
 	end
+	inp = varargin{1};
+	mod_consts = varargin{2};
 
 	%Generate shorthand notation for some variables
 	N.N_t = inp.prb.N_t;							%Number of sample points
@@ -333,8 +334,14 @@ function varargout = dpm(varargin)
 	%state/control grid is generated/updated.
 	mdl_time_inv = isfield(inp.sol,'time_inv') && isequal(inp.sol.time_inv, true);
 	
+	%Boolean that is true if status messages should be supressed from the
+	%terminal
+	quietmode = isfield(inp.sol, 'quiet') && isequal(inp.sol.quiet, true);
+	
 	%Miscellaneous initialization
-	dispstat('','init');
+	if(~quietmode)
+		dispstat('','init');
+	end
 	iter = 1;
 	c = zeros(1, inp.sol.iter_max);
 	
@@ -399,10 +406,10 @@ function varargout = dpm(varargin)
 		
 		while(res_invalid && infeas_quit == false)
 			%Perform back-calculation
-			last_map = calc_back(cand_grid, N, mod_consts, inp, mdl_time_inv);
+			last_map = calc_back(cand_grid, N, mod_consts, inp, mdl_time_inv, quietmode);
 
 			%Apply forward calculation
-			[cand_res, new_c, t] = calc_fw(last_map, N, mod_consts, inp);
+			[cand_res, new_c, t] = calc_fw(last_map, N, mod_consts, inp, quietmode);
 			
 			if(isfinite(new_c))
 				%Our current grid gave a valid result, yay! We can now use
@@ -418,7 +425,9 @@ function varargout = dpm(varargin)
 					%Didn't get a feasible result on the first iteration,
 					%generate an error as this is likely due a model error
 					%or bad configuration.
-					warning('Could not find a feasible solution!');
+					if(~quietmode)
+						warning('Could not find a feasible solution!');
+					end
 					if inp.sol.debug
 						keyboard;
 					end
@@ -437,10 +446,12 @@ function varargout = dpm(varargin)
 					end
 					
 					cand_grid = resize_grid(last_grid, last_res, inp.sol, mu, N, mdl_time_inv);
-					if(isnumeric(mu))
-						dispstat(sprintf('Iteration %d of %d, invalid result with grid scaling factor %f, retrying with factor %f', iter, inp.sol.iter_max, mu, new_mu), 'keepthis');
-					else
-						dispstat(sprintf('Iteration %d of %d, invalid result with grid scaling factors, retrying with increased factors.', iter, inp.sol.iter_max), 'keepthis');
+					if(~quietmode)
+						if(isnumeric(mu))
+							dispstat(sprintf('Iteration %d of %d, invalid result with grid scaling factor %f, retrying with factor %f', iter, inp.sol.iter_max, mu, new_mu), 'keepthis');
+						else
+							dispstat(sprintf('Iteration %d of %d, invalid result with grid scaling factors, retrying with increased factors.', iter, inp.sol.iter_max), 'keepthis');
+						end
 					end
 					mu = new_mu;
 				end
@@ -448,8 +459,9 @@ function varargout = dpm(varargin)
 		end
 		
 		c(iter) = new_c;
-		
-		dispstat(sprintf('Iteration %d of %d, net cumulative cost %5e', iter, inp.sol.iter_max, new_c),'keepthis');
+		if(~quietmode)
+			dispstat(sprintf('Iteration %d of %d, net cumulative cost %5e', iter, inp.sol.iter_max, new_c),'keepthis');
+		end
 		%Draw plots
 		if(isfield(inp.sol, 'plotfun') && infeas_quit == false && isa(inp.sol.plotfun, 'function_handle'))
 			inp.sol.plotfun(last_res, last_grid, c, t, iter, mod_consts, h_iterplot);
@@ -468,7 +480,7 @@ function varargout = dpm(varargin)
 
 end
 
-function map = calc_back(grd, N, mod_consts, inp, mdl_time_inv)
+function map = calc_back(grd, N, mod_consts, inp, mdl_time_inv, quietmode)
 	%Apply a backwards DP search. All we are essentially doing here is
 	%creating a map with costs to transition from any one state combination
 	%at time t_n to the lowest-cost state that lies within the bounds set
@@ -499,7 +511,9 @@ function map = calc_back(grd, N, mod_consts, inp, mdl_time_inv)
 	%so no interpolation is needed).
 	for n_t = N.N_t-1:-1:1
 		pct = (1 - n_t / (N.N_t-1)) * 100;
-		dispstat(sprintf('Running backward calculation %3.1f %%', pct));
+		if(~quietmode)
+			dispstat(sprintf('Running backward calculation %3.1f %%', pct));
+		end
 		
 		%If the infeasibility flag has been set there doesn't exist any
 		%feasible solution to bring us from where we are now to the final
@@ -840,7 +854,7 @@ function map = calc_back(grd, N, mod_consts, inp, mdl_time_inv)
 	end
 end
 
-function [res, c, t] = calc_fw(map, N, mod_consts, inp)
+function [res, c, t] = calc_fw(map, N, mod_consts, inp, quietmode)
 %Start from x_0 and find the lowest cost path that reaches the end
 	res = repmat(struct('x', zeros([1, N.N_x]), ...
 						'u', zeros([1, N.N_u]), ...
@@ -852,7 +866,9 @@ function [res, c, t] = calc_fw(map, N, mod_consts, inp)
 
 	for n_t = 1:N.N_t-1
 		pct = n_t / (N.N_t-1) * 100;
-		dispstat(sprintf('Running forward calculation %3.1f %%', pct));
+		if(~quietmode)
+			dispstat(sprintf('Running forward calculation %3.1f %%', pct));
+		end
 		%All we really need to do here is step through all time samples,
 		%starting from the first with lowest cumulative cost, and at each
 		%sample apply the stored optimal control input u_o. As we won't

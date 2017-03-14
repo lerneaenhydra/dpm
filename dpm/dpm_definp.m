@@ -96,8 +96,11 @@ def_inp.sol.regrid_x = [];
 %Set to true to allow re-gridding the control variables after each
 %iteration
 def_inp.sol.regrid_u = [];
-%Set true to enable debug mode (break execution on error/'unexpected' state
+%Set true to enable debug mode (break execution on error/'unexpected'
+%state)
 def_inp.sol.debug = [];
+%Set true to disable terminal status messages
+def_inp.sol.quiet = [];
 
 %System configuration
 %The maximum number of state/control combinations to test per call to the
