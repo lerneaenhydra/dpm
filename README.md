@@ -45,4 +45,4 @@ configure limiting the search space for grid variable(s).
 Use the call `[res, grid, t, c, map] = dpm(inp, mod_consts, h_iterplot)`
 to solve the dynamic programming problem.
 
-See the files `test_basic.m`, `test_loose.m`, and `test_multidim.m` for usage examples.
+See the files `test_basic.m`, `test_loose.m`, and `test_harmonic_osc.m` for usage examples.
