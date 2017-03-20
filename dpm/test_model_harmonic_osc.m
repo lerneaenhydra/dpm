@@ -1,6 +1,7 @@
-function [x_nn, c] = test_model_2d(x_n, u_n, t, inp)
-% [x_nn, c] = TEST_MODEL_2D(x_n, u_n, t, inp) Calculates the state resulting
-% from applying an input u_n to the system while at state x_n.
+function [x_nn, c] = test_model_harmonic_osc(x_n, u_n, t, inp)
+% [x_nn, c] = TEST_MODEL_HARMONIC_OSC(x_n, u_n, t, inp) Calculates the
+% state resulting from applying an input u_n to the system while at state
+% x_n.
 %	x_n		State at time t_n. Array where columns correspond to state
 %			variables. Each row corresponds to a given state configuration.
 %	u_n		Control input at time t_n. Array where columns correspond to

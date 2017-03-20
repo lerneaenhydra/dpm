@@ -21,12 +21,13 @@ addParameter(p, 'time_inv', []);	%Optional input boolean that enables/disables t
 parse(p, varargin{:});
 
 if(isempty(varargin))
+	%Manually control some problem set-up parameters
 	clc
 	clear variables
-	format short eng	
+	format short eng
 	pen_thrs = 2.1;
-	gpu_calc = false;
-	time_inv = false;
+	gpu_calc = false;		%Set to true to enable GPU offloading for model evaluations
+	time_inv = false;		%Set to true to set the model time-invariance flag, which cause the the system model to only be called for one time sample
 else
 	pen_thrs = p.Results.pen_thrs;
 	gpu_calc = p.Results.gpu_calc;
