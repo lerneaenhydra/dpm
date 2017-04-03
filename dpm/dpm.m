@@ -601,8 +601,7 @@ function map = calc_back(grd, N, mod_consts, inp, mdl_time_inv, quietmode)
 					%Limit the number of state/control combinations per call to the
 					%system model.
 					for k=1:inp.sol.fun_maxcombs:size(scat_x_nn_iter,1)
-						idx_call = k:k+inp.sol.fun_maxcombs-1;
-						idx_call(idx_call > size(scat_x_nn_iter,1)) = [];
+						idx_call = k:min(k+inp.sol.fun_maxcombs-1, size(scat_x_nn_iter,1));
 						[scat_x_nn_k, scat_c_k] = inp.sol.fun(x_n_iter(idx_call,:), u_n_iter(idx_call,:), N.t(n_t), mod_consts);
 						scat_x_nn_iter(idx_call,:) = scat_x_nn_k;
 						scat_c_iter(idx_call,:) = scat_c_k;
