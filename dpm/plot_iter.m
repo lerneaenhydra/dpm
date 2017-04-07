@@ -47,7 +47,7 @@ function plot_iter(res, grd, c, t, iter, const, h)
 	cla;
 	plotstuff(t(1:end-1), uo, ctrl_range(1:end-1,:), plotstr);
 	grid on;
-	title('Control');
+	title('Optimal control and search space range');
 	xlabel('Time');
 	ylabel('Control');
 	axis auto;
