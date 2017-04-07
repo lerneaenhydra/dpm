@@ -57,6 +57,14 @@ def_inp.prb.N_x_grid = [];
 %sample
 def_inp.prb.N_u_grid = [];
 
+%Optionally manually force a number of state combinations to be included in
+%the state grid. Should be a matrix with def_inp.prb.N_x rows and an
+%arbitrary number of columns.
+def_inp.prb.X_grid_manpts = [];
+%Optionally manually force a number of control combinations to be included in
+%the control grid. Should be a matrix with def_inp.prb.N_u rows and an
+%arbitrary number of columns.
+def_inp.prb.U_grid_manpts = [];
 
 %Structure format to use for each non-empty element in
 %def_inp.prb.grid_seed

@@ -36,10 +36,10 @@ dp_inp.prb.X0_l = [0.5; 0.5];
 dp_inp.prb.X0_h = [inf; inf];
 %The number of grid points to generate for each state variable at each
 %sample
-dp_inp.prb.N_x_grid = [30; 30];
+dp_inp.prb.N_x_grid = [25; 25];
 %The number of grid points to generate for each control variable at each
 %sample
-dp_inp.prb.N_u_grid = 3;
+dp_inp.prb.N_u_grid = 6;
 
 
 %Contains the lower bound for all inputs
@@ -49,10 +49,12 @@ dp_inp.prb.U_h = 1;
 
 %The amount to scale the grid extent in each iteration, centered about the
 %previous optimal path
-dp_inp.sol.mu_grid_dec = 0.75;
-dp_inp.sol.mu_grid_inc = 1.051;
+dp_inp.sol.mu_grid_dec.x = 0.75;
+dp_inp.sol.mu_grid_dec.u = 0.85;
+dp_inp.sol.mu_grid_inc.x = 1.051;
+dp_inp.sol.mu_grid_inc.u = 1.051;
 %Termination threshold for maximum number of iterations
-dp_inp.sol.iter_max = 10;
+dp_inp.sol.iter_max = 30;
 %Set to true to allow re-gridding the state variables after each iteration
 dp_inp.sol.regrid_x = true;
 %Set to true to allow re-gridding the control variables after each
@@ -73,7 +75,7 @@ dp_inp.sol.interpmode = 'linear';
 dp_inp.sol.extrapmode = 'nearest';
 
 dp_inp.sol.pen_norm = 'squaredeuclidean';
-dp_inp.sol.pen_thrs = 1.^2;
+dp_inp.sol.pen_thrs = 2.^2;
 dp_inp.sol.pen_fun_s = @(x) 1;
 dp_inp.sol.pen_fun_a = @(x) 1;
 

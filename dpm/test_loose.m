@@ -8,9 +8,10 @@ format short eng
 %using an initial approximation that neglects the dynamics of the ODE with
 %faster time scale.
 %
-%For more details, see the IFAC conference paper "A Multi-pass Optimal
-% Control Iterative Dynamic Programming Algorithm with Regularization",
-% Jonathan Lock, Tomas McKelvey, 2016.
+%For more details, see the IFAC conference paper "A Computationally Fast
+%Iterative Dynamic Programming Method for Optimal Control of Loosely
+%Coupled Dynamical Systems with Different Time Scales" Jonathan Lock, Tomas
+%McKelvey, 2016.
 %
 
 %Define all project-wide constants
@@ -126,7 +127,7 @@ inp.prb.X0_l = [1; 0];
 inp.prb.X0_h = [inf; 1];
 inp.prb.U_l = -1;
 inp.prb.U_h = 1;
-inp.prb.N_x_grid = [45; 45];
+inp.prb.N_x_grid = [50; 50];
 inp.prb.N_u_grid = 25;
 
 mod_const.T_s = const.T_s_2d;
@@ -144,7 +145,7 @@ grid_subset.center = [res_1d{end}.x];
 grid_subset.range = 1/mod_const.alpha * 2 * (inp.prb.X_h(1) - inp.prb.X_l(1)) * ones(size(t_1d));
 inp.prb.grid_seed{1} = grid_subset;
 
-inp.sol.mu_grid_dec = 0.9;
+inp.sol.mu_grid_dec = 0.8;
 inp.sol.mu_grid_inc = 1.051;
 inp.sol.iter_max = 50;
 inp.sol.regrid_x = true;
