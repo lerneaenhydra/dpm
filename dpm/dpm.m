@@ -88,7 +88,7 @@ function varargout = dpm(varargin)
 %								control variable.
 %
 %						Note; the following fields must be matrices with
-%							N_x and N_u columns respectively with an
+%							one and N_u columns respectively with an
 %							arbitrary number of rows. They may be set to an
 %							empty matrix if their function is not needed.
 %							These fields may be useful in some applications
@@ -101,6 +101,12 @@ function varargout = dpm(varargin)
 %							points will be constant for all IDP iterations.
 %						.X_grid_manpts	Manually forces the inclusion of
 %							specific state combinations to the state grid.
+%							Only available for problems with one state
+%							variable, as for multi-state problems this
+%							would generate a non-gridded set of tested
+%							states (e.g. require using scatteredinterpolant
+%							instead of griddedinterpolant), which is
+%							computationally expensive to interpolate.
 %						.U_grid_manpts Manually forces the inclusion of
 %							specific control combinations to the control
 %							grid.
@@ -192,6 +198,12 @@ function varargout = dpm(varargin)
 %								all time samples.
 %						.plotfun Optional handle to a plot function called
 %								on every iteration.
+%						.unique_thrs Optional scalar/vector of values that,
+%								if present, will activate storing the
+%								relative number of one-step-suboptimal
+%								controls for each state combination and
+%								sample. See dpm_definp.m and
+%								test_uniqueness.m for more details.
 %						.interpmode Interpolation mode to use. Set to a
 %								string, whose valid values depend on the
 %								chosen value of N_x as follows;
@@ -514,7 +526,8 @@ function map = calc_back(grd, N, mod_consts, inp, mdl_time_inv, quietmode)
 				'xnn_scat', zeros([N.N_x_comb, N.N_x]), ...
 				'c', zeros(N.N_x_comb, 1), ...
 				'cum', zeros(N.N_x_comb, 1), ...
-				'u_o', zeros([N.N_x_comb, N.N_u])), ...
+				'u_o', zeros([N.N_x_comb, N.N_u]), ...
+				'rel_unique_thrs', zeros([N.N_x_comb, numel(inp.sol.unique_thrs)])), ...
 			N.N_t-1, 1);
 
 	%Internal flag set true if we at some point determine that the feasible
@@ -703,7 +716,8 @@ function map = calc_back(grd, N, mod_consts, inp, mdl_time_inv, quietmode)
 			if(n_t == N.N_t - 1)
 				%If we're at the last sample, simply minimize the
 				%cost for the current sample
-				[net_cum_cost, minidx] = min(scat_c_k);
+				tot_c = scat_c_k;
+				[net_cum_cost, minidx] = min(tot_c);
 			else
 				%If we're not at the last sample, determine the cumulative
 				%cost by adding the sample cost from x_n to scat_x_nn with
@@ -737,9 +751,32 @@ function map = calc_back(grd, N, mod_consts, inp, mdl_time_inv, quietmode)
 					cum_c(~isfinite(cum_c)) = inf;
 				end
 
-				[net_cum_cost, minidx] = min(scat_c_k + cum_c);
+				%The total cost is simply the cumulative cost from the next
+				%sample to the end added with the interpolated cost from
+				%the current to the next sample.
+				tot_c = scat_c_k + cum_c;
+				
+				%Find the best control to apply by selecting the smallest
+				%total cost.
+				[net_cum_cost, minidx] = min(tot_c);
 			end
-
+			
+			if(~isempty(inp.sol.unique_thrs))
+				%Look at the relative cost increase for selecting slightly
+				%sub-optimal controls.
+				rel_c = tot_c/net_cum_cost;
+				
+				for j = 1:numel(inp.sol.unique_thrs)
+					if(all(isinf(tot_c)))
+						n_thrs = nan;	%Manually handle case where there are no feasible controls
+					else
+						n_thrs = (sum(rel_c <= (1 + inp.sol.unique_thrs(j))) - 1) / length(rel_c);
+						n_thrs = max(0, n_thrs);
+					end
+					map(n_t).rel_unique_thrs(k,j) = n_thrs;
+				end
+			end
+			
 			%Save the state we started in
 			map(n_t).x(k,:) = x_n_k(1,:);
 

@@ -25,13 +25,22 @@ function plot_iter(res, grd, c, t, iter, const, h)
 	state_finitespace = cat(1, res.finitespace);
 	ctrl_range = [cat(2,grd.u_h).', cat(2, grd.u_l).'];
 
-	if(length(t > 50))
+	if(length(t) > 25)
 		plotstr = '-';
 	else
 		plotstr = '-o';
 	end
 	
 	figure(h);
+	
+	x_legend_str = cell(1, size(xo,2));
+	u_legend_str = cell(1, size(uo,2));
+	for k=1:length(x_legend_str)
+		x_legend_str{k} = sprintf('x%d', k);
+	end
+	for k=1:length(u_legend_str)
+		u_legend_str{k} = sprintf('u%d', k);
+	end
 	
 	clf;
 	subplot(3,2,1);
@@ -41,6 +50,8 @@ function plot_iter(res, grd, c, t, iter, const, h)
 	title('State progression and backwards-reachable state space');
 	xlabel('Time');
 	ylabel('State');
+	h_l = legend(x_legend_str{:});
+	h_l.Location = 'best';
 	axis auto;
 
 	subplot(3,2,2);
@@ -50,6 +61,8 @@ function plot_iter(res, grd, c, t, iter, const, h)
 	title('Optimal control and search space range');
 	xlabel('Time');
 	ylabel('Control');
+	h_l = legend(u_legend_str{:});
+	h_l.Location = 'best';
 	axis auto;
 
 	subplot(3,2,3);

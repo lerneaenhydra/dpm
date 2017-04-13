@@ -2,6 +2,7 @@ function [h_p, h_c] = plot_map(map, dp_inp, varargin)
 %PLOT_MAP Plots the state transition map for 1- and 2-dimensional problems
 %	map		Map structure for the solved problem.
 %	dp_inp	Configuration structure used for DPM script.
+%
 %	The following parameters can additionally be supplied to alter/add
 %	behavior beyond the bare-bones defaults using parameter/value pairs as
 %	follows;
@@ -13,7 +14,9 @@ function [h_p, h_c] = plot_map(map, dp_inp, varargin)
 %			decimation. (IE. if the x and y axes have 50 points each and a
 %			value of 25 is specified every other point will have a drawn
 %			array, while a value of 20 will result in drawing an arrow for
-%			every third point).
+%			every third point). Set to 0 to disable all arrows (except
+%			those drawn with the 'res' argument). Leave unspecified or set
+%			to inf to display all arrows.
 %	res		If supplied should be the result given by the dpm function (IE.
 %			[res, grd, t, c, map] = dpm(...)), will plot the forward
 %			calculation state trajectory. For 1-dimensional cases this will
@@ -32,10 +35,20 @@ function [h_p, h_c] = plot_map(map, dp_inp, varargin)
 %			generate smaller regions.
 %	disp_grid Logical scalar, if supplied and true will display all grid
 %			points.
-%
 %	h_p		Handle to the plot
 %	h_c		If a color bar was added to the plot will be a handle to the
 %			color bar.
+%	opt_uniqueness Integer k, will override typical behavior and instead of
+%			coloring the cumulative cost from each state to the terminal
+%			state draw the relative number of suboptimal controls that,
+%			if taken and followed by optimal controls, would not raise the total cost by more than 1 + dp_inp.sol.unique_thrs(k). Gives an
+%			indication of the uniqueness of the problem
+%			formulation, where a larger value for small thresholds
+%			unique_thrs(k) indicates that variations around the generated
+%			solution would typically give a similar final cost, while
+%			smaller values indicate that the particular chosen optimal path
+%			is significantly better than the other candidates.
+%
 % Copyright (c) 2016, Jonathan Lock
 % All rights reserved.
 %
@@ -59,7 +72,7 @@ function [h_p, h_c] = plot_map(map, dp_inp, varargin)
 	addRequired(p, 'dp_inp');
 	addParameter(p, 'h', [], @(x) ishandle(x));
 	addParameter(p, 'n', [], @(x) isnumeric(x) && isscalar(x) && round(x) == x);
-	addParameter(p, 'n_arrows', 0, @(x) isnumeric(x) && isscalar(x) && round(x) == x && x > 0);
+	addParameter(p, 'n_arrows', inf, @(x) isnumeric(x) && isscalar(x) && round(x) == x && x >= 0);
 	addParameter(p, 'res', [], @(x) isstruct(x));
 	addParameter(p, 'colorbar', false, @(x) islogical(x) && isscalar(x));
 	addParameter(p, 'title', '', @(x) ischar(x));
@@ -69,6 +82,7 @@ function [h_p, h_c] = plot_map(map, dp_inp, varargin)
 	addParameter(p, 'c_interp', 1, @(x) isnumeric(x) && isscalar(x) && x > 0);
 	addParameter(p, 'bound_tightness', 0.5, @(x) isnumeric(x) && isscalar(x) && x >= 0 && x <= 1);
 	addParameter(p, 'disp_grid', false, @(x) islogical(x) && isscalar(x));
+	addParameter(p, 'opt_uniqueness', 0, @(x) x == round(x) && isscalar(x) && x > 0);
 	
 	parse(p, map, dp_inp, varargin{:});
 	
@@ -86,6 +100,7 @@ function [h_p, h_c] = plot_map(map, dp_inp, varargin)
 	c_interp = p.Results.c_interp;
 	bound_tightness = p.Results.bound_tightness;
 	disp_grid = p.Results.disp_grid;
+	opt_uniqueness = p.Results.opt_uniqueness;
 	
 	plotstr.title = p.Results.title;
 	plotstr.xlabel = p.Results.xlabel;
@@ -138,16 +153,16 @@ function [h_p, h_c] = plot_map(map, dp_inp, varargin)
 	function sliderCallback(~, ~)
 		figure(h);
 		idx = round(get(b, 'value'));
-		h_c = draw_map(map, dp_inp, idx, dim, n_arrows, res, en_colorbar, plotstr, c_interp, bound_tightness, disp_grid);
+		h_c = draw_map(map, dp_inp, idx, dim, n_arrows, res, en_colorbar, plotstr, c_interp, bound_tightness, disp_grid, opt_uniqueness);
 	end
 
 	%Force drawing plot on the first call to this function
-	h_c = draw_map(map, dp_inp, idx, dim, n_arrows, res, en_colorbar, plotstr, c_interp, bound_tightness, disp_grid);
+	h_c = draw_map(map, dp_inp, idx, dim, n_arrows, res, en_colorbar, plotstr, c_interp, bound_tightness, disp_grid, opt_uniqueness);
 	
 	h_p = h;
 end
 
-function h_c = draw_map(map, dp_inp, idx, dim, n_arrows, res, en_colorbar, plotstr, c_interp, bound_tightness, disp_grid)
+function h_c = draw_map(map, dp_inp, idx, dim, n_arrows, res, en_colorbar, plotstr, c_interp, bound_tightness, disp_grid, opt_uniqueness)
 	cla;
 	hold off;
 	%Generate the set of current/next state vectors to draw in the
@@ -162,7 +177,13 @@ function h_c = draw_map(map, dp_inp, idx, dim, n_arrows, res, en_colorbar, plots
 	if(dim == 2)
 		%Generate basic current/next state vectors and the associated
 		%cumulative cost
-		cum = map(idx).cum(:);
+		if(opt_uniqueness)
+			contourbg_raw = map(idx).rel_unique_thrs(:,opt_uniqueness);
+			cumcost = map(idx).cum(:);
+			contourbg_raw(~isfinite(cumcost)) = inf;
+		else
+			contourbg_raw = map(idx).cum(:);
+		end
 		x = map(idx).x;
 		xn = map(idx).xnn_scat;
 		
@@ -170,7 +191,7 @@ function h_c = draw_map(map, dp_inp, idx, dim, n_arrows, res, en_colorbar, plots
 		%the contourf function family
 		x_c = reshape(x(:,1), dp_inp.prb.N_x_grid.');
 		y_c = reshape(x(:,2), dp_inp.prb.N_x_grid.');
-		c_c = reshape(cum, dp_inp.prb.N_x_grid.');
+		c_c = reshape(contourbg_raw, dp_inp.prb.N_x_grid.');
 		
 		x_arrows = zeros([prod(ceil(dp_inp.prb.N_x_grid.'./arrow_decimation)), dim]);
 		xn_arrows = zeros([prod(ceil(dp_inp.prb.N_x_grid.'./arrow_decimation)), dim]);
@@ -179,7 +200,7 @@ function h_c = draw_map(map, dp_inp, idx, dim, n_arrows, res, en_colorbar, plots
 			%Reshape the raw data to allow for easier decimation
 			x_tmp = reshape(x(:,i), dp_inp.prb.N_x_grid.');
 			xn_tmp = reshape(xn(:,i), dp_inp.prb.N_x_grid.');
-			c_tmp = reshape(cum, dp_inp.prb.N_x_grid.');
+			c_tmp = reshape(contourbg_raw, dp_inp.prb.N_x_grid.');
 			
 			%Decimate the raw data
 			x_tmp = x_tmp(1:arrow_decimation(1):end, 1:arrow_decimation(2):end);
@@ -198,7 +219,13 @@ function h_c = draw_map(map, dp_inp, idx, dim, n_arrows, res, en_colorbar, plots
 		
 	elseif(dim == 1)
 		%Extract raw data to plot
-		cum = [map.cum];
+		if(opt_uniqueness)
+			tmp = arrayfun(@(x) x.rel_unique_thrs(:,opt_uniqueness), map, 'un', false);
+			contourbg_raw = cell2mat(tmp.');
+			contourbg_raw(~isfinite([map.cum])) = inf;
+		else
+			contourbg_raw = [map.cum];
+		end
 		x = [map.x];
 		xn = [map.xnn_scat];
 		
@@ -206,7 +233,7 @@ function h_c = draw_map(map, dp_inp, idx, dim, n_arrows, res, en_colorbar, plots
 		%the contourf family, we just need to generate an array with time
 		%data. As we want to display results up to and including the last
 		%sample, extend the state and cumulative cost memory elements
-		c_c = [cum, zeros(size(cum,1), 1)];
+		c_c = [contourbg_raw, zeros(size(contourbg_raw,1), 1)];
 		y_c = [x, x(:,end)];
 		t_c = linspace(0, dp_inp.prb.T_s * (dp_inp.prb.N_t-1), dp_inp.prb.N_t);
 		x_c = repmat(t_c, size(y_c, 1), 1);
@@ -217,7 +244,7 @@ function h_c = draw_map(map, dp_inp, idx, dim, n_arrows, res, en_colorbar, plots
 		x_arrows = x_c(1:arrow_decimation:end, 1:end-1);
 		xn_arrows = x_c(1:arrow_decimation:end, 2:end);
 		
-		c_arrows = cum(1:arrow_decimation:end, :);
+		c_arrows = contourbg_raw(1:arrow_decimation:end, :);
 		
 		x_arrows = [x_arrows(:), y_arrows(:)];
 		xn_arrows = [xn_arrows(:), yn_arrows(:)];
@@ -243,7 +270,7 @@ function h_c = draw_map(map, dp_inp, idx, dim, n_arrows, res, en_colorbar, plots
 	%indicate infeasible states and zero-cost states with a distinct color
 
 	%Number of colors bands to draw for contour plot
-	bands = 50;
+	bands = 100;
 	cmap = repmat(linspace(1, 0.5, bands).', 1, 3);
 	
 	%Set true if a contour map was drawn (which also sets the axis extents)
@@ -278,7 +305,11 @@ function h_c = draw_map(map, dp_inp, idx, dim, n_arrows, res, en_colorbar, plots
 			hold on;
 			contourf(x_c_interp, y_c_interp, c_c_interp, contour_range, 'edgecolor', 'none');
 			drew_contour = true;
-			colormap(cmap);
+			if(opt_uniqueness)
+				colormap(flipud(parula));
+			else
+				colormap(cmap);
+			end
 			if(en_colorbar)
 				h_c = colorbar;
 				ylabel(h_c, plotstr.clabel);
@@ -308,7 +339,7 @@ function h_c = draw_map(map, dp_inp, idx, dim, n_arrows, res, en_colorbar, plots
 	if(dim == 1)
 		x_lim = xlim;
 		y_lim = ylim;
-	elseif(dim == 2);
+	elseif(dim == 2)
 		x_lim = [min(x(:,1)), max(x(:,1))];
 		y_lim = [min(x(:,2)), max(x(:,2))];
 	else
@@ -330,7 +361,7 @@ function h_c = draw_map(map, dp_inp, idx, dim, n_arrows, res, en_colorbar, plots
 	
 	
 	%Draw arrow-plot if there are any arrows to add
-	if(~isempty(x_arrows))
+	if(~isempty(x_arrows) && n_arrows ~= 0)
 		warning('off', 'all');
 		arrow(x_arrows, xn_arrows, 'color', [0, 0.2, 0.5], 'length', 10);
 		warning('on', 'all');
@@ -340,19 +371,19 @@ function h_c = draw_map(map, dp_inp, idx, dim, n_arrows, res, en_colorbar, plots
 	if(~isempty(res))
 		if(dim == 1)
 			dummy = [res.x].';
-			x_fw = [t_c(1:end-1).', dummy(1:end-1)];
-			xn_fw = [t_c(2:end).', dummy(2:end)];
+			%For the 1D-case, plot forward trajectory with solid
+			%(non-arrow) line as this is (arguably) more clear.
+			plot(t_c, dummy, 'Color', [0.1, 0.6, 0.2], 'LineWidth', 2);
 		elseif(dim == 2)
 			x_fw = res(idx).x;
 			xn_fw = res(idx+1).x;
+			if(~isempty(x_fw) && all(all(isfinite(x_fw))))
+				warning('off', 'all');
+				arrow(x_fw, xn_fw, 'color', [0.1, 0.6, 0.2], 'Width', 2, 'length', 10);
+				warning('on', 'all');
+			end
 		else
 			error('unsupported dimensionality');
-		end
-	
-		if(~isempty(x_fw) && all(all(isfinite(x_fw))))
-			warning('off', 'all');
-			arrow(x_fw, xn_fw, 'color', [0.1, 0.6, 0.2], 'Width', 2, 'length', 10);
-			warning('on', 'all');
 		end
 	end
 	

@@ -104,6 +104,7 @@ def_inp.sol.regrid_x = [];
 %Set to true to allow re-gridding the control variables after each
 %iteration
 def_inp.sol.regrid_u = [];
+
 %Set true to enable debug mode (break execution on error/'unexpected'
 %state)
 def_inp.sol.debug = [];
@@ -156,6 +157,26 @@ def_inp.sol.fun_exp = [];
 %def_inp.prb.grid_seed cells) or iterative dynamic programming method (i.e.
 %def_inp.sol.iter_max set to any value other than 1).
 def_inp.sol.time_inv = [];
+
+%Optional vector that may be set to a sclar or vector of real-valued
+%numbers typically > 0. If present will fill in the relative number of
+%one-step-suboptimal controls that give a relative increase in cumulative
+%cost less than each value listed in this scalar/vector. Here,
+%one-step-suboptimal means applying a suboptimal control u to a given
+%state x(n), generating a new state x(n+1), after which fully-optimal
+%controls are taken. I.E. the returned value for each state (which, by
+%nature, lies between 0 and 1) indicates how many of the tested controls
+%give a small increase in the cumulative cost. This can give an idea as to
+%if a problem is underdefined in certain regions/times. For example, if the
+%returned values are always 0 this indicates that only the chosen control
+%gives a cumulative cost that is within unique_thrs of the cumulative cost.
+%However, if the returned value is instead, say, 0.5, this indicates that
+%half of the tested control signals lie within unique_thrs of the
+%cumulative cost and choosing a sub-optimal control would only result in
+%small penalties to the cumulative cost.
+%Typically this value is set to value(s) in the range 1e-6 to 1e-1. See
+%'test_uniqueness.m' for an example of how to use this and view the results.
+def_inp.sol.unique_thrs = [];
 
 %Interpolation mode to use. Set to a string, whose valid values depend on
 %the chosen value of N_x as follows;
