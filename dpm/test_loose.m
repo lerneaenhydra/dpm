@@ -136,14 +136,15 @@ mod_const.X_h_unpen = [2; 1];	%Upper limit of state value range that is complete
 mod_const.pen = 1.1;				%Additive penalty to sample cost for violated soft constraints
 
 %Feed the results from the previous, 1-dimensional problem, to the initial
-%grid setup for this 2-dimensional problem. Write to the first cell in
-%grid_seed as we only want to make the search grid for the first element
-%smaller than the full variable space.
-grid_subset.t = t_1d;
-grid_subset.interpmode = 'linear';
-grid_subset.center = [res_1d{end}.x];
-grid_subset.range = 1/mod_const.alpha * 2 * (inp.prb.X_h(1) - inp.prb.X_l(1)) * ones(size(t_1d));
-inp.prb.grid_seed{1} = grid_subset;
+%grid setup for this 2-dimensional problem. We want to reduce the search
+%range for the first state variable based on res_1d{end}.x.
+grid_subset.vartype = 'x';	%Set up the reduced grid range for a state variable
+grid_subset.varidx = 1;		%Set the reduced grid range for the first variable
+grid_subset.t = t_1d;		%The previous results were sampled at the previous sample rate
+grid_subset.interpmode = 'linear';		%Apply linear interpolation to samples between the points in the previous solution
+grid_subset.center = [res_1d{end}.x];	%The centerpoint for the variable search range is set to the previous solution
+grid_subset.range = 1/mod_const.alpha * 2 * (inp.prb.X_h(1) - inp.prb.X_l(1)) * ones(size(t_1d));	%The variable range extent is set based on the time scale quotient alpha and the original search range
+inp.prb.grid_seed{1} = grid_subset;		%Finally, set grid_seed to a 1x1 cell array with the configured variable and search range
 
 inp.sol.mu_grid_dec = 0.8;
 inp.sol.mu_grid_inc = 1.051;

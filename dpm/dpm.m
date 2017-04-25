@@ -393,21 +393,19 @@ function varargout = dpm(varargin)
 				'u_man', inp.prb.U_grid_manpts), ...			%All manually added control combinations. Each row corresponds to a single control configuration.
 			N.N_t, 1);
 	
-	%Check if any of the state variables is configured for a reduced search
-	%space
+	%Check if any of the state/control variables are configured for a
+	%reduced search space
 	if(~isempty(inp.prb.grid_seed))
 		for i = 1:length(inp.prb.grid_seed)
-			if(~isempty(inp.prb.grid_seed{i}))
-				%If we get here, we know that the i'th state variable has a
-				%configured reduced search space, so set it up now
-				seed = inp.prb.grid_seed{i};	%Shorthand dummy variable used for cleaner code
-				t = linspace(0, N.T_s * (N.N_t - 1), N.N_t);
-				x_l = interp1(seed.t, seed.center - seed.range/2, t, seed.interpmode);
-				x_h = interp1(seed.t, seed.center + seed.range/2, t, seed.interpmode);
-				for j = 1:length(last_grid)
-					last_grid(j).x_h(i) = x_h(j);
-					last_grid(j).x_l(i) = x_l(j);
-				end
+			seed = inp.prb.grid_seed{i};	%Shorthand dummy variable used for cleaner code
+			t = linspace(0, N.T_s * (N.N_t - 1), N.N_t);
+			l = interp1(seed.t, seed.center - seed.range/2, t, seed.interpmode);
+			h = interp1(seed.t, seed.center + seed.range/2, t, seed.interpmode);
+			for j = 1:length(last_grid)
+				%Set the seed.vartype grid type and idx'th value to the
+				%configured bounds
+				last_grid(j).([seed.vartype '_l'])(seed.varidx) = l(j);
+				last_grid(j).([seed.vartype '_h'])(seed.varidx) = h(j);
 			end
 		end
 	end

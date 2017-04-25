@@ -66,8 +66,13 @@ def_inp.prb.X_grid_manpts = [];
 %arbitrary number of columns.
 def_inp.prb.U_grid_manpts = [];
 
-%Structure format to use for each non-empty element in
-%def_inp.prb.grid_seed
+%Structure format to use for each element in def_inp.prb.grid_seed
+%The type of variable (state or control) whose range is to be reduced. Set
+%to 'x' for a state variable, or 'u' for a control variable.
+grid_subset.vartype = [];
+%Indexer for the specific variable to reduce the range for. E.g. set to 2
+%to reduce the range for the second state/control variable.
+grid_subset.varidx = [];
 %The sample points (in time) that will be used to generate the non-uniform
 %grid.
 grid_subset.t = [];
@@ -79,9 +84,10 @@ grid_subset.range = [];
 %grid_subset.t. May be any value that is accepted by the interp1 function.
 grid_subset.interpmode = [];
 
-%Optional non-uniform grid setup. Set the n'th cell to a structure with the
-%same fields as in grid_subset to force the dpm script to reduce the search
-%space for the n'th state variable.
+%Optional non-uniform grid setup. Set to a cell array of grid_subset
+%structures to force the dpm script to reduce the search space for any
+%number of state/control variables. The order of the elements in the cell
+%array has no effect.
 def_inp.prb.grid_seed = cell(0);
 
 
