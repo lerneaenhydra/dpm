@@ -224,7 +224,10 @@ else
 	%grid_subset.t. May be any value that is accepted by the interp1 function.
 	grid_subset.interpmode = 'linear';
 	
-	consts.dp_inp.prb.grid_seed{2} = grid_subset;
+	grid_subset.varidx = 2;
+	grid_subset.vartype = 'x';
+	
+	consts.dp_inp.prb.grid_seed{1} = grid_subset;
 end
 
 consts.dp_inp.sol.debug = false;
