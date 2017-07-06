@@ -114,8 +114,11 @@ def_inp.sol.regrid_u = [];
 %Set true to enable debug mode (break execution on error/'unexpected'
 %state)
 def_inp.sol.debug = [];
-%Set true to disable terminal status messages
-def_inp.sol.quiet = [];
+%Set to any of;
+%	'none'	Don't display any status messages
+%	'final' Only keep the most recent iteration's status and cost
+%	'iter'	Display each iteration's status and cost
+def_inp.sol.display = [];
 
 %System configuration
 %The maximum number of state/control combinations to test per call to the

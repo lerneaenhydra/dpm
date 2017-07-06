@@ -254,8 +254,12 @@ function varargout = dpm(varargin)
 %						.debug	Set true to enable debugging mode, will
 %								stop execution in this function on
 %								error/'unexpected' results.
-%						.quiet	Set true to disable terminal status
-%								messages.
+%						.display Set to 'iter' to display the cost for each
+%								iteration in the console. Set to 'final' to
+%								display the most recent cost. Set to 'none'
+%								to not print any results. If field does not
+%								exist will behave in the same way as with
+%								'iter'.
 %
 %			mod_consts	Input which is directly passed to system model
 %						function.
@@ -366,12 +370,14 @@ function varargout = dpm(varargin)
 	%state/control grid is generated/updated.
 	mdl_time_inv = isfield(inp.sol,'time_inv') && isequal(inp.sol.time_inv, true);
 	
-	%Boolean that is true if status messages should be supressed from the
-	%terminal
-	quietmode = isfield(inp.sol, 'quiet') && isequal(inp.sol.quiet, true);
+	%Controls the verbosity of status messages
+	dispmode = 'iter';
+	if(isfield(inp.sol, 'display'))
+		dispmode = inp.sol.display;
+	end
 	
 	%Miscellaneous initialization
-	if(~quietmode)
+	if(~strcmp(dispmode, 'none'))
 		dispstat('','init');
 	end
 	iter = 1;
@@ -438,10 +444,10 @@ function varargout = dpm(varargin)
 		
 		while(res_invalid && infeas_quit == false)
 			%Perform back-calculation
-			last_map = calc_back(cand_grid, N, mod_consts, inp, mdl_time_inv, quietmode);
+			last_map = calc_back(cand_grid, N, mod_consts, inp, mdl_time_inv, dispmode, iter);
 
 			%Apply forward calculation
-			[cand_res, new_c, t] = calc_fw(last_map, N, mod_consts, inp, quietmode);
+			[cand_res, new_c, t] = calc_fw(last_map, N, mod_consts, inp, dispmode, iter);
 			
 			if(isfinite(new_c))
 				%Our current grid gave a valid result, yay! We can now use
@@ -457,7 +463,7 @@ function varargout = dpm(varargin)
 					%Didn't get a feasible result on the first iteration,
 					%generate an error as this is likely due a model error
 					%or bad configuration.
-					if(~quietmode)
+					if(~strcmp(dispmode, 'none'))
 						warning('Could not find a feasible solution!');
 					end
 					if inp.sol.debug
@@ -478,11 +484,22 @@ function varargout = dpm(varargin)
 					end
 					
 					cand_grid = resize_grid(last_grid, last_res, inp, mu, N, mdl_time_inv);
-					if(~quietmode)
+					if(~strcmp(dispmode, 'none'))
 						if(isnumeric(mu))
-							dispstat(sprintf('Iteration %d of %d, invalid result with grid scaling factor %f, retrying with factor %f', iter, inp.sol.iter_max, mu, new_mu), 'keepthis');
+							str = 'Iteration %d of %d; invalid result with grid scaling factor %f, retrying with factor %f';
+							if(strcmp(dispmode, 'iter'))
+								dispstat(sprintf(str, iter, inp.sol.iter_max, mu, new_mu), 'keepthis');
+							else
+								dispstat(sprintf(str, iter, inp.sol.iter_max, mu, new_mu));
+							end
 						else
-							dispstat(sprintf('Iteration %d of %d, invalid result with grid scaling factors, retrying with increased factors.', iter, inp.sol.iter_max), 'keepthis');
+							str = 'Iteration %d of %d; invalid result with grid scaling factors, retrying with increased factors.';
+							if(strcmp(dispmode, 'iter'))
+								dispstat(sprintf(str, iter, inp.sol.iter_max), 'keepthis');
+							else
+								dispstat(sprintf(str, iter, inp.sol.iter_max));
+							end
+							
 						end
 					end
 					mu = new_mu;
@@ -491,8 +508,14 @@ function varargout = dpm(varargin)
 		end
 		
 		c(iter) = new_c;
-		if(~quietmode)
-			dispstat(sprintf('Iteration %d of %d, net cumulative cost %5e', iter, inp.sol.iter_max, new_c),'keepthis');
+		if(~strcmp(dispmode, 'none'))
+			str = 'Iteration %d of %d; net cumulative cost %5e';
+			if(strcmp(dispmode, 'iter'))
+				dispstat(sprintf(str, iter, inp.sol.iter_max, new_c), 'keepthis');
+			else
+				dispstat(sprintf(str, iter, inp.sol.iter_max, new_c));
+			end
+			
 		end
 		%Draw plots
 		if(isfield(inp.sol, 'plotfun') && infeas_quit == false && isa(inp.sol.plotfun, 'function_handle'))
@@ -512,7 +535,7 @@ function varargout = dpm(varargin)
 
 end
 
-function map = calc_back(grd, N, mod_consts, inp, mdl_time_inv, quietmode)
+function map = calc_back(grd, N, mod_consts, inp, mdl_time_inv, dispmode, iter)
 	%Apply a backwards DP search. All we are essentially doing here is
 	%creating a map with costs to transition from any one state combination
 	%at time t_n to the lowest-cost state that lies within the bounds set
@@ -544,8 +567,8 @@ function map = calc_back(grd, N, mod_consts, inp, mdl_time_inv, quietmode)
 	%so no interpolation is needed).
 	for n_t = N.N_t-1:-1:1
 		pct = (1 - n_t / (N.N_t-1)) * 100;
-		if(~quietmode)
-			dispstat(sprintf('Running backward calculation %3.1f %%', pct));
+		if(~strcmp(dispmode, 'none'))
+			dispstat(sprintf('Iteration %d of %d; running backward calculation %3.1f %%', iter, inp.sol.iter_max, pct));
 		end
 		
 		%If the infeasibility flag has been set there doesn't exist any
@@ -910,7 +933,7 @@ function map = calc_back(grd, N, mod_consts, inp, mdl_time_inv, quietmode)
 	end
 end
 
-function [res, c, t] = calc_fw(map, N, mod_consts, inp, quietmode)
+function [res, c, t] = calc_fw(map, N, mod_consts, inp, dispmode, iter)
 %Start from x_0 and find the lowest cost path that reaches the end
 	res = repmat(struct('x', zeros([1, N.N_x]), ...
 						'u', zeros([1, N.N_u]), ...
@@ -922,8 +945,8 @@ function [res, c, t] = calc_fw(map, N, mod_consts, inp, quietmode)
 
 	for n_t = 1:N.N_t-1
 		pct = n_t / (N.N_t-1) * 100;
-		if(~quietmode)
-			dispstat(sprintf('Running forward calculation %3.1f %%', pct));
+		if(~strcmp(dispmode, 'none'))
+			dispstat(sprintf('Iteration %d of %d; running forward calculation %3.1f %%', iter, inp.sol.iter_max, pct));
 		end
 		%All we really need to do here is step through all time samples,
 		%starting from the first with lowest cumulative cost, and at each
