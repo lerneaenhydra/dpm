@@ -8,9 +8,9 @@ function [x_nn1, x_nn2, c] = test_model_basic_exp(x_n1, x_n2, u_n1, u_n2, t, t_s
 %	Inputs: 
 %	x_n1	State 1 at time t_n. Column array where each element
 %			corresponds to the current value of state 1.
-%	x_n2	State 2 at time t_n. Otherwise identical to x_n1. u_n1	Control
-%			1 at time t_n. Column array where each elemenent corresponds to
-%			control variable 1.
+%	x_n2	State 2 at time t_n. Otherwise identical to x_n1.
+%	u_n1	Control 1 at time t_n. Column array where each elemenent
+%			corresponds to control variable 1.
 %	u_n2	Control 2 at time t_n. Otherwise identical to u_n1.
 %	t		The current time
 %
