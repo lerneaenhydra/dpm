@@ -1,9 +1,9 @@
 function [res_basic, grd_basic, t_basic, c_basic, map_basic, dp_inp_basic] = test_basic(varargin)
 %Bare-bones example for the dpm solver using a two-state/two-control
-%problem optionally calculated on the GPU. See test_model_1d_exp for the
-%dynamic model definition. See test_loose for an example of how to first
-%solve a lower-dimensional problem and use its results to reduce the search
-%range for applicable problems.
+%problem optionally calculated using the local parallel pool or on the GPU.
+%See test_model_1d_exp for the dynamic model definition. See test_loose for
+%an example of how to first solve a lower-dimensional problem and use its
+%results to reduce the search range for applicable problems.
 %To fairly compare the computational time for GPU calculations use the
 %profiler and compare the time needed to execute line
 % '[scat_x_nn_g, scat_c_g] = arrayfun(inp.sol.fun_exp, x_g, u_g, t_g, opts{:});'
@@ -13,27 +13,12 @@ function [res_basic, grd_basic, t_basic, c_basic, map_basic, dp_inp_basic] = tes
 % '[scat_x_nn_k, scat_c_k] = inp.sol.fun(x_n(idx_call,:), u_n(idx_call,:), N.t(n_t), mod_consts);'
 %in dpm.m
 
-
 p = inputParser;
-addParameter(p, 'pen_thrs', []);	%Optional input scalar that allows changing the default penalty threshold
-addParameter(p, 'gpu_calc', []);	%Optional input boolean that enables/disables model GPU offloading. See the dpm help section for details on when this is beneficial.
-addParameter(p, 'time_inv', []);	%Optional input boolean that enables/disables the model time invariance assumption. See the dpm help section for details on when this is beneficial.
+addParameter(p, 'pen_thrs', 2.1, @(x) isscalar(x) && isfinite(x) && x >= 0);	%Override the default penalty threshold
+addParameter(p, 'gpu_calc', false, @(x) isscalar(x) && islogical(x));			%Enable model GPU offloading. See the dpm help section for details on when this is beneficial.
+addParameter(p, 'cpu_parallel', false, @(x) isscalar(x) && islogical(x));		%Enable model and interpolation parallelization on CPU. See the dpm help section for details on when this is beneficial.
+addParameter(p, 'time_inv', false, @(x) isscalar(x) && islogical(x));			%Enable the model time invariance assumption. See the dpm help section for details on when this is beneficial.
 parse(p, varargin{:});
-
-if(isempty(varargin))
-	%Manually control some problem set-up parameters
-	clc
-	clear variables
-	format short eng
-	pen_thrs = 2.1;
-	gpu_calc = false;		%Set to true to enable GPU offloading for model evaluations
-	time_inv = false;		%Set to true to set the model time-invariance flag, which cause the the system model to only be called for one time sample
-else
-	pen_thrs = p.Results.pen_thrs;
-	gpu_calc = p.Results.gpu_calc;
-	time_inv = p.Results.time_inv;
-end
-
 
 %DP solver set-up
 dp_inp_basic = dpm();
@@ -92,15 +77,20 @@ dp_inp_basic.sol.regrid_u = true;
 dp_inp_basic.sol.debug = false;
 %System configuration
 dp_inp_basic.sol.fun = @test_model_basic;
-dp_inp_basic.sol.fun_maxcombs = 1e6;
+%Arbitrarily limit the number of state/control combinations to a value that
+%ensures that multiple passes are required. This allows for a more
+%effective illustration of the effectivness of the cpu_parallel
+%functionality.
+dp_inp_basic.sol.fun_maxcombs = min(1e5, round(prod(dp_inp_basic.prb.N_x_grid)*prod(dp_inp_basic.prb.N_u_grid)/50));
 dp_inp_basic.sol.plotfun = @plot_iter;
+dp_inp_basic.sol.time_inv = p.Results.time_inv;
+dp_inp_basic.sol.cpu_parallel = p.Results.cpu_parallel;
 %GPU configuration
-dp_inp_basic.sol.gpu_enable = gpu_calc;
+dp_inp_basic.sol.gpu_enable = p.Results.gpu_calc;
 dp_inp_basic.sol.gpu_enter = @single;	%Use single-precision floating-point variables for good performance on standard "gaming" GPUs
 dp_inp_basic.sol.gpu_exit = @double;	%Convert data back to the default double-precision floats
 dp_inp_basic.sol.fun_exp = @test_model_basic_exp;
 
-dp_inp_basic.sol.time_inv = time_inv;
 
 %If using the model-time-invariance assumption the grid must be identical
 %for all samples. This means that IDP only ever makes sense for
@@ -108,7 +98,7 @@ dp_inp_basic.sol.time_inv = time_inv;
 %the initial state. To illustrate this, artificially inflate the initial
 %search space by a factor of 100 (which ensures that the final result gives
 %a trajectory that is fairly constant in this range).
-if(time_inv)
+if(p.Results.time_inv)
 	dp_inp_basic.prb.X_l = dp_inp_basic.prb.X_l * 100;
 	dp_inp_basic.prb.X_h = dp_inp_basic.prb.X_h * 100;
 	dp_inp_basic.prb.U_l = dp_inp_basic.prb.U_l * 100;
@@ -125,7 +115,7 @@ dp_inp_basic.sol.interpmode = 'linear';
 dp_inp_basic.sol.extrapmode = 'nearest';
 
 dp_inp_basic.sol.pen_norm = 'squaredeuclidean';
-dp_inp_basic.sol.pen_thrs = pen_thrs;
+dp_inp_basic.sol.pen_thrs = p.Results.pen_thrs;
 dp_inp_basic.sol.pen_fun_s = @(x) 1;
 dp_inp_basic.sol.pen_fun_a = @(x) 1;
 

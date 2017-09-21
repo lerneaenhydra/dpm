@@ -155,6 +155,14 @@ def_inp.sol.gpu_exit = [];
 %alphabetically as sol.fun is simply a wrapper for this function.
 def_inp.sol.fun_exp = [];
 
+%Optional flag that, if present and set to true, enables parallel
+%evaluation of the model during the back-calculation phase. Primarily
+%useful in cases where the evaluation time for a single model call is
+%significant, e.g. large-dimensional systems and/or cases where N_x_grid
+%and N_u_grid contain large values. To determine whether or not to use this
+%functionality test with and without the flag set.
+def_inp.sol.cpu_parallel = [];
+
 %Optional flag that, if present and set to true, indicates that the system
 %model is time invariant (i.e. def_inp.sol.fun/def_inp.sol.fun_exp gives
 %identical output for all tested input values t). If this is applicable and

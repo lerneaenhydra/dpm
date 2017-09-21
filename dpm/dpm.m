@@ -127,7 +127,9 @@ function varargout = dpm(varargin)
 %								number of iterations.
 %						.fun_maxcombs Maximum number of state/control
 %								combinations to include per call to the
-%								system model.
+%								system model. Note that if cpu_parallel is
+%								enabled the memory usage will increase
+%								linearly with the number of workers.
 %						.fun	Handle to function representing system
 %								model. Should be a function of form
 %								[x_nn, c] = fun(x_n, u_n, t, opt) where;
@@ -196,6 +198,16 @@ function varargout = dpm(varargin)
 %								controls vary significantly over time. All
 %								grids will be forced to be identical for
 %								all time samples.
+%						.cpu_parallel Optional flag that, if present and
+%								set to true, enables parallel evaluation of
+%								the model during the back-calculation
+%								phase. Primarily useful in cases where the
+%								evaluation time for a single model call is
+%								significant, e.g. large-dimensional systems
+%								and/or cases where N_x_grid and N_u_grid
+%								contain large values. To determine whether
+%								or not to use this functionality test with
+%								and without the flag set.
 %						.plotfun Optional handle to a plot function called
 %								on every iteration.
 %						.unique_thrs Optional scalar/vector of values that,
@@ -363,6 +375,7 @@ function varargout = dpm(varargin)
 		size(inp.prb.X_grid_manpts, 1);				%Number of state combinations at each sample
 	N.N_u_comb = prod(inp.prb.N_u_grid) + ... 
 		size(inp.prb.U_grid_manpts, 1);				%Number of control combinations at each sample
+	N.N_tot_comb = N.N_x_comb * N.N_u_comb;			%Number of total state/control combinations at each sample
 	N.t = linspace(0, N.T_s * (N.N_t - 1), N.N_t);	%Time at each sample point
 	
 	%Boolean that is true if the model is time-invariant. This will change
@@ -386,6 +399,21 @@ function varargout = dpm(varargin)
 	map = cell(1, inp.sol.iter_max);
 	res = cell(1, inp.sol.iter_max);
 	grid = cell(1, inp.sol.iter_max);
+	
+	%If configured for CPU-parallel operation start the pool if needed and
+	%override the number of state/control configuration iterations to test
+	%to be close to a multiple of the number of matlab workers.
+	if(numel(inp.sol.cpu_parallel) ~= 0 && inp.sol.cpu_parallel)
+		p = gcp('nocreate');
+		if(isempty(p))
+			p = parpool();
+		end
+		N.N_parpool_workers = p.NumWorkers;
+		k = ceil(N.N_tot_comb/(N.N_parpool_workers*inp.sol.fun_maxcombs));
+		inp.sol.fun_maxcombs = ceil(N.N_tot_comb/(N.N_parpool_workers*k));
+	else
+		N.N_parpool_workers = 0;
+	end
 	
 	
 	%Generate the grid structure with state and control bounds and mesh
@@ -616,10 +644,6 @@ function map = calc_back(grd, N, mod_consts, inp, mdl_time_inv, dispmode, iter)
 			%[1;2;3...;1;2;3...]
 			u_n_iter = repmat(grd(n_t).u, N.N_x_comb, 1);
 
-			%If the complete array is larger than an optional maximum size,
-			%call the system model several times with blocks of data
-			scat_x_nn_iter = zeros(size(x_n_iter));
-
 			%Manually handle the case where the system model is to be computed
 			%on the GPU
 			if(numel(inp.sol.gpu_enable) ~= 0 && inp.sol.gpu_enable == true)
@@ -650,23 +674,34 @@ function map = calc_back(grd, N, mod_consts, inp, mdl_time_inv, dispmode, iter)
 				%Move results back to CPU
 				scat_x_nn_iter = inp.sol.gpu_exit(gather([x_g_iter{:}]));
 				scat_c_iter = inp.sol.gpu_exit(gather(scat_c_g));
-
 			else
-				%Perform model call on CPU
-				if(numel(inp.sol.fun_maxcombs) ~= 0 && inp.sol.fun_maxcombs > 0)
-					%Limit the number of state/control combinations per call to the
-					%system model.
-					for k=1:inp.sol.fun_maxcombs:size(scat_x_nn_iter,1)
-						idx_call = k:min(k+inp.sol.fun_maxcombs-1, size(scat_x_nn_iter,1));
-						[scat_x_nn_k, scat_c_k] = inp.sol.fun(x_n_iter(idx_call,:), u_n_iter(idx_call,:), N.t(n_t), mod_consts);
-						scat_x_nn_iter(idx_call,:) = scat_x_nn_k;
-						scat_c_iter(idx_call,:) = scat_c_k;
-					end
-				else
-					%No limits placed on the number of state/control combinations
-					%to the system model, so simply supply all of the state/control
-					%combinations for the current time-step.
-					[scat_x_nn_iter, scat_c_iter] = inp.sol.fun(x_n_iter, u_n_iter, N.t(n_t), mod_consts);
+				%Perform model call on CPU, possibly in parallel
+				n_it = ceil(N.N_tot_comb/inp.sol.fun_maxcombs);
+				
+				%Allocate reduction variables for storing model results
+				scat_x_nn_iter = zeros(size(x_n_iter));
+				scat_c_iter = zeros(size(x_n_iter, 1), 1);
+				parfor_size_x_nn = size(scat_x_nn_iter);
+				parfor_size_c = size(scat_c_iter);
+				
+				parfor (k = 1 : n_it, N.N_parpool_workers)	%N_parpool_workers will be zero if cpu_parallel is disabled -> parfor will run locally
+					%Generate indices of state/control combinations to test
+					%for this iteration
+					idx_call = (1:inp.sol.fun_maxcombs) + (k-1) * inp.sol.fun_maxcombs; %#ok<PFBNS>
+					%Remove any residual elements on the last iteration
+					idx_call(idx_call > N.N_tot_comb) = []; %#ok<PFBNS>
+					%Call the model function
+					[scat_x_nn_k, scat_c_k] = inp.sol.fun(x_n_iter(idx_call,:), u_n_iter(idx_call,:), N.t(n_t), mod_consts); %#ok<PFBNS>
+					
+					%Place the result in a zero vector in the correct
+					%location. Use scat_x_nn_iter and scat_c_iter as
+					%reduction variables
+					dummy_x = zeros(parfor_size_x_nn);
+					dummy_c = zeros(parfor_size_c);
+					dummy_x(idx_call,:) = scat_x_nn_k;
+					dummy_c(idx_call,:) = scat_c_k;
+					scat_x_nn_iter = scat_x_nn_iter + dummy_x;
+					scat_c_iter = scat_c_iter + dummy_c;
 				end
 			end
 		end
@@ -758,7 +793,7 @@ function map = calc_back(grd, N, mod_consts, inp, mdl_time_inv, dispmode, iter)
 					%gridded and scattered data for a two-dimensional
 					%problem
 					if false
-						figure();
+						figure(); %#ok<UNRCH>
 						fin_idx = isfinite(map(n_t+1).cum);
 						scatter(map(n_t+1).x(fin_idx,1), map(n_t+1).x(fin_idx,2), [], map(n_t+1).cum(fin_idx), 'filled');
 						hold on;
@@ -833,7 +868,7 @@ function map = calc_back(grd, N, mod_consts, inp, mdl_time_inv, dispmode, iter)
 		%Manually execute the following lines to plot a detailed map of the
 		%results from the current time step (for a 2-state system)
 		if false
-			figure();
+			figure(); %#ok<UNRCH>
 			fin_idx = isfinite(map(n_t).cum);
 			scatter(map(n_t).x(fin_idx,1), map(n_t).x(fin_idx,2), [], map(n_t).cum(fin_idx), 'filled');
 			hold on;
@@ -914,7 +949,7 @@ function map = calc_back(grd, N, mod_consts, inp, mdl_time_inv, dispmode, iter)
 		
 		if false
 			%Debugging plot for the two-dimensional case
-			figure();
+			figure(); %#ok<UNRCH>
 			feas_x = map(n_t).x(~inf_idx,:);
 			finpen_x = isfinite(fin_scale);
 			scatter(feas_x(finpen_x, 1), feas_x(finpen_x, 2), [], fin_scale(finpen_x), 'filled');
@@ -994,7 +1029,7 @@ function [res, c, t] = calc_fw(map, N, mod_consts, inp, dispmode, iter)
 					%Optionally manually plot the gridded and stored map points and
 					%the state we ended up in where we want to interpolate a
 					%trajectory
-					c_temp = reshape(map(n_t).cum, inp.prb.N_x_grid.');
+					c_temp = reshape(map(n_t).cum, inp.prb.N_x_grid.'); %#ok<UNRCH>
 
 					F = griddedInterpolant(x_temp, y_temp, c_temp, inp.sol.interpmode, 'none');
 					c_interp = F(x_o);
