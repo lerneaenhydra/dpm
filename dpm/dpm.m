@@ -51,11 +51,6 @@ function varargout = dpm(varargin)
 %						.N_t	The number of samples to process. This
 %								gives the total simulation time by T_s *
 %								(N_t - 1).
-%						.dp_inf	Value used to represent an infeasible
-%								state/control combination. Must be at least
-%								as large as the maximum cost from one
-%								sample to the next for any valid 
-%								state/control input.
 %
 %						Note; all the following fields must be matrices of
 %						size [N_x, 1].
