@@ -58,6 +58,7 @@ inp.sol.pen_norm = 'squaredeuclidean';
 inp.sol.pen_thrs = sqrt(2)^2;
 inp.sol.pen_fun_s = @(x) 2;
 inp.sol.pen_fun_a = @(x) 1;
+inp.sol.fun_maxcombs = 1e5;
 
 mod_const.T_s = const.T_s_1d;
 
@@ -156,6 +157,7 @@ inp.sol.fun = @model_loose_2d;
 inp.sol.plotfun = @plot_iter;
 inp.sol.interpmode = 'linear';
 inp.sol.extrapmode = 'none';
+inp.sol.fun_maxcombs = 1e5;
 
 inp.sol.pen_norm = 'squaredeuclidean';
 inp.sol.pen_thrs = sqrt(2)^2;

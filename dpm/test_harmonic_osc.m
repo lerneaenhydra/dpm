@@ -66,6 +66,7 @@ dp_inp.sol.debug = false;
 dp_inp.sol.fun = @test_model_harmonic_osc;
 dp_inp.sol.plotfun = @plot_iter;
 dp_inp.sol.unique_thrs = 1.01;
+dp_inp.sol.fun_maxcombs = 1e5;
 
 %Interpolation mode to use. Set to a string, whose valid values depend on
 %the chosen value of N_x as follows;
